@@ -1,4 +1,5 @@
 #!/bin/bash
+set -n
 
 # ===============================================
 # ZXMC Universal Installer
@@ -47,7 +48,6 @@ post_execution_pause() {
     # Wait for any key press
     read -n 1 -s -r -p "Press any key to return to the Main Menu..."
     clear # Clear screen AFTER the user confirms
-
 }
 
 # --- Core Utility Functions ---
