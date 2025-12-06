@@ -10,6 +10,7 @@
 BRANDING="ZXMC"
 SERVER_DIR="/var/www/pterodactyl" # Standard Pterodactyl directory
 WINGS_DIR="/etc/pterodactyl"      # Standard Wings configuration directory
+SH_VERSION="1.2.1"
 
 # --- ASCII Art Splash ---
 ZMC_ART="
@@ -895,6 +896,7 @@ main_menu() {
         # 2. Display ASCII art ONLY on the very first loop iteration
         if [ -z "$INITIAL_RUN_COMPLETE" ]; then
             echo -e "${COLOR_CYAN}$ZMC_ART${NC}"
+            echo -e "${COLOR_GREEN}$SH_VERSION${NC}"
             INITIAL_RUN_COMPLETE="true"
         fi
 
