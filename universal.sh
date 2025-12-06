@@ -11,6 +11,18 @@ BRANDING="ZXMC"
 SERVER_DIR="/var/www/pterodactyl" # Standard Pterodactyl directory
 WINGS_DIR="/etc/pterodactyl"      # Standard Wings configuration directory
 
+# --- ASCII Art Splash ---
+ZMC_ART="
+  ________   __  __  __  _____ 
+ |___  /\ \ / / |  \/  |/ ____|
+    / /  \ V /  | \  / | |     
+   / /    > <   | |\/| | |     
+  / /__  / . \  | |  | | |____ 
+ /_____|/_/ \_\ |_|  | |\_____|
+"
+# Variable to track if the ASCII art has been shown
+INITIAL_RUN_COMPLETE=""
+
 # --- ANSI Gradient Color Codes (Blue/Purple) ---
 # Define a range for a blue-to-purple gradient feel
 COLOR_PURPLE='\033[0;35m' # Purple
@@ -907,45 +919,45 @@ show_system_info() {
 # ===============================================
 # === Main Menu System ===
 # ===============================================
+# --- Main Menu Function Update ---
 main_menu() {
-    while true; do
-        echo -e "\n${COLOR_BLUE}===============================================${NC}"
-        echo -e "${COLOR_PURPLE}🚀 ${BRANDING} UNIVERSAL INSTALLER MENU 🚀${NC}"
-        echo -e "${COLOR_BLUE}===============================================${NC}"
-        
-        echo -e "Select an option:"
-        echo -e "  1. ${COLOR_GREEN}Update${NC} (System Updates)"
-        echo -e "  2. ${COLOR_GREEN}Tailscale${NC} (VPN/Networking)"
-        echo -e "  3. ${COLOR_BLUE}Panel${NC} (Pterodactyl Web Interface)"
-        echo -e "  4. ${COLOR_BLUE}Wings${NC} (Pterodactyl Node Daemon)"
-        echo -e "  5. ${COLOR_BLUE}BluePrint${NC} (Pterodactyl Extension)"
-        echo -e "  6. ${COLOR_CYAN}Cloudflare${NC} (Tunnel Setup)"
-        echo -e "  7. ${COLOR_CYAN}Change Theme${NC} (Pterodactyl Theme)"
-        echo -e "  8. ${COLOR_RED}Uninstall${NC} (Remove Components)"
-        echo -e "  9. ${COLOR_YELLOW}System Info${NC} (Diagnostics)"
-        echo -e "  10. ${COLOR_RED}Exit${NC}"
-        
-        read -p "Enter your choice (1-10): " choice
+    # Display ASCII art ONLY on the very first loop iteration
+    if [ -z "$INITIAL_RUN_COMPLETE" ]; then
+        clear
+        echo -e "${CYAN}$ZMC_ART${NC}"
+        INITIAL_RUN_COMPLETE="true"
+    fi
 
-        case $choice in
-            1) update_system ;;
-            2) install_tailscale ;;
-            3) install_panel ;;
-            4) install_wings ;;
-            5) install_blueprint ;;
-            6) install_cloudflared ;;
-            7) change_theme ;;
-            8) uninstall_components ;;
-            9) show_system_info ;;
-            10) 
-                title_echo "EXITING INSTALLER"
-                echo -e "${COLOR_CYAN}Thanks for using the ${BRANDING} service! Goodbye! 👋${NC}"
-                exit 0 
-                ;;
-            *) echo -e "${COLOR_RED}Invalid choice. Please enter a number between 1 and 10.${NC}" ;;
+    # Loop until user chooses to exit
+    while true; do
+        
+        # Display the main menu text
+        echo -e "\n${CYAN}=======================================${NC}"
+        echo -e "${CYAN}🚀 Universal Server Management Menu 🚀${NC}"
+        echo -e "${CYAN}=======================================${NC}"
+        
+        echo -e "Please select an option to install or manage:"
+        echo -e "  1) ${GREEN}Java Manager (Install / Switch Java Versions)${NC}"
+        echo -e "  2) ${GREEN}Minecraft Server Installer (Paper/Forge/etc.)${NC}"
+        echo -e "--- Pterodactyl Installation Options ---"
+        echo -e "  3) ${CYAN}Pterodactyl Panel (Web UI)${NC}"
+        echo -e "  4) ${CYAN}Pterodactyl Wings (Node Daemon)${NC}"
+        echo -e "  5) ${CYAN}Pterodactyl Blueprint (Extensions)${NC}"
+        echo -e "  6) ${CYAN}Cloudflare Tunnel (Secure Panel Access)${NC}"
+        echo -e "  7) ${RED}Exit Script${NC}"
+
+        read -p "Enter your choice (1-7): " main_choice
+
+        # Execute chosen function, WRAPPED in clear commands for a clean flow
+        case $main_choice in
+            1) clear; install_java_manager; clear ;; 
+            2) clear; install_mc_server; clear ;;
+            3) clear; install_panel; clear ;;
+            4) clear; install_wings; clear ;;
+            5) clear; install_blueprint; clear ;;
+            6) clear; install_cloudflare_tunnel; clear ;;
+            7) break ;;
+            *) echo -e "${RED}Invalid choice. Please select a valid option.${NC}" ;;
         esac
     done
 }
-
-# --- Script Start ---
-main_menu
