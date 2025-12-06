@@ -900,27 +900,36 @@ main_menu() {
         echo -e "${CYAN}🚀 Universal Server Management Menu 🚀${NC}"
         echo -e "${CYAN}=======================================${NC}"
         
-        echo -e "Please select an option to install or manage:"
-        echo -e "  1) ${GREEN}Java Manager (System Update)${NC}"
-        echo -e "  2) ${GREEN}update_system (VPN/Networking Services)${NC}"
-        echo -e "  3) ${CYAN}Pterodactyl Panel (Web UI)${NC}"
-        echo -e "  4) ${CYAN}Pterodactyl Wings (Node Daemon)${NC}"
-        echo -e "  5) ${CYAN}Pterodactyl Blueprint (Extensions)${NC}"
-        echo -e "  6) ${CYAN}Cloudflare Tunnel (Secure Panel Access)${NC}"
-        echo -e "  7) ${RED}Exit Script${NC}"
+        echo -e "Select an option:"
+        echo -e "  1. ${COLOR_GREEN}Update${NC} (System Updates)"
+        echo -e "  2. ${COLOR_GREEN}Tailscale${NC} (VPN/Networking)"
+        echo -e "  3. ${COLOR_BLUE}Panel${NC} (Pterodactyl Web Interface)"
+        echo -e "  4. ${COLOR_BLUE}Wings${NC} (Pterodactyl Node Daemon)"
+        echo -e "  5. ${COLOR_BLUE}BluePrint${NC} (Pterodactyl Extension)"
+        echo -e "  6. ${COLOR_CYAN}Cloudflare${NC} (Tunnel Setup)"
+        echo -e "  7. ${COLOR_CYAN}Change Theme${NC} (Pterodactyl Theme)"
+        echo -e "  8. ${COLOR_RED}Uninstall${NC} (Remove Components)"
+        echo -e "  9. ${COLOR_YELLOW}System Info${NC} (Diagnostics)"
+        echo -e "  10. ${COLOR_RED}Exit${NC}"
+        
+        read -p "Enter your choice (1-10): " choice
 
-        read -p "Enter your choice (1-7): " main_choice
-
-        # Execute chosen function, WRAPPED in clear commands for a clean flow
-        case $main_choice in
-            1) clear; update_system; clear ;; 
-            2) clear; install_tailscale; clear ;;
-            3) clear; install_panel; clear ;;
-            4) clear; install_wings; clear ;;
-            5) clear; install_blueprint; clear ;;
-            6) clear; install_cloudflare_tunnel; clear ;;
-            7) break ;;
-            *) echo -e "${RED}Invalid choice. Please select a valid option.${NC}" ;;
+        case $choice in
+            1) update_system ;;
+            2) install_tailscale ;;
+            3) install_panel ;;
+            4) install_wings ;;
+            5) install_blueprint ;;
+            6) install_cloudflared ;;
+            7) change_theme ;;
+            8) uninstall_components ;;
+            9) show_system_info ;;
+            10) 
+                title_echo "EXITING INSTALLER"
+                echo -e "${COLOR_CYAN}Thanks for using the ${BRANDING} service! Goodbye! 👋${NC}"
+                exit 0 
+                ;;
+            *) echo -e "${COLOR_RED}Invalid choice. Please enter a number between 1 and 10.${NC}" ;;
         esac
     done
 }
