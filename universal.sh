@@ -879,6 +879,8 @@ show_system_info() {
     else
         echo -e "${COLOR_YELLOW}  Cloudflared: ${NC}Not Installed"
     fi
+
+    sleep 5
 }
 
 # ===============================================
