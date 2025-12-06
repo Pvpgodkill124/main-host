@@ -916,7 +916,7 @@ main_menu() {
         echo -e "  7. ${COLOR_CYAN}Change Theme${NC} (Pterodactyl Theme)"
         echo -e "  8. ${COLOR_RED}Uninstall${NC} (Remove Components)"
         echo -e "  9. ${COLOR_YELLOW}System Info${NC} (Diagnostics)"
-        echo -e "  10. ${COLOR_RED}Exit${NC}"
+        echo -e "  0. ${COLOR_RED}Exit${NC}"
         
         read -p "Enter your choice (1-10): " main_choice
 
