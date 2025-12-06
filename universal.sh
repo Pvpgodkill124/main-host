@@ -121,22 +121,21 @@ update_system() {
     
     title_echo "SYSTEM UPDATE"
 
-    show_loading "Starting $PACKAGE_MANAGER update..."
-    # Hide all update logs
+    echo -e "${COLOR_YELLOW}--- Running System Update (apt update) ---${NC}"
+    # Use allow-unauthenticated to ignore GPG key errors that cause a non-zero exit code
     sudo $UPDATE_COMMAND -o Acquire::AllowInsecureRepositories=true -o Acquire::AllowDowngradeToInsecure=true
-    $UPDATE_COMMAND > /dev/null 2>&1
     
     if [ $? -ne 0 ]; then
-        echo -e "${COLOR_RED}❌ Update failed! Check connection or package manager logs.${NC}"
+        echo -e "${COLOR_RED}❌ Update failed! Please check the output above for the specific error!${NC}"
         return
     fi
     
-    show_loading "Applying system upgrades..."
-    # Hide all upgrade logs
-    $UPGRADE_COMMAND > /dev/null 2>&1
+    echo -e "\n${COLOR_YELLOW}--- Running System Upgrade (apt upgrade) ---${NC}"
+    # NOTE: Always use -y for upgrade if you want it automated
+    sudo $UPGRADE_COMMAND
     
     if [ $? -ne 0 ]; then
-        echo -e "${COLOR_RED}❌ Upgrade failed! Check connection or package manager logs.${NC}"
+        echo -e "${COLOR_RED}❌ Upgrade failed! Please check the output above for the specific error!${NC}"
         return
     fi
 
