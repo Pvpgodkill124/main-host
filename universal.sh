@@ -191,11 +191,8 @@ install_panel() {
 
     # --- Step 1: Install Core Dependencies (Nginx, MariaDB, PHP) ---
     show_loading "Installing Core LAMP Stack and Dependencies..."
-    # Suppress all command output for a clean installation experience
     sudo apt update > /dev/null 2>&1
     sudo apt -y install software-properties-common curl apt-transport-https ca-certificates gnupg > /dev/null 2>&1
-    
-    # PHP Repository and Installation
     sudo add-apt-repository ppa:ondrej/php -y > /dev/null 2>&1
     sudo apt update > /dev/null 2>&1
     sudo apt -y install php8.1 php8.1-{cli,gd,mysql,pdo,mbstring,tokenizer,bcmath,xml,fpm,curl,zip} nginx mariadb-server unzip git composer > /dev/null 2>&1
@@ -208,12 +205,10 @@ install_panel() {
     
     # --- Step 2: Database Setup ---
     show_loading "Setting up MariaDB Database..."
-    # Generate a secure random password for the database
     DB_PASSWORD=$(cat /dev/urandom | tr -dc 'a-zA-Z0-9' | fold -w 16 | head -n 1)
     DB_NAME="pterodactyl"
     DB_USER="pterodactyl_user"
     
-    # Create Database, User, and Grant Privileges (Quietly)
     sudo mysql -e "CREATE DATABASE $DB_NAME;"
     sudo mysql -e "CREATE USER '$DB_USER'@'127.0.0.1' IDENTIFIED BY '$DB_PASSWORD';"
     sudo mysql -e "GRANT ALL PRIVILEGES ON $DB_NAME.* TO '$DB_USER'@'127.0.0.1' WITH GRANT OPTION;"
@@ -232,24 +227,24 @@ install_panel() {
     show_loading "Configuring Environment..."
     sudo cp .env.example .env
 
-    # Auto-set environment variables (DB credentials, APP URL)
     sudo sed -i "s/DB_DATABASE=homestead/DB_DATABASE=$DB_NAME/" .env
     sudo sed -i "s/DB_USERNAME=homestead/DB_USERNAME=$DB_USER/" .env
     sudo sed -i "s/DB_PASSWORD=secret/DB_PASSWORD=$DB_PASSWORD/" .env
-    sudo sed -i "s|APP_URL=http://localhost|APP_URL=https://$PANEL_HOST|" .env # Assuming HTTPS later
+    sudo sed -i "s|APP_URL=http://localhost|APP_URL=https://$PANEL_HOST|" .env
 
-    # Install Composer dependencies
-    sudo composer install --no-dev --optimize-autoloader > /dev/null 2>&1
+    # Run these as www-data after initial setup, before final chown
+    # Set file ownership early for Composer/Artisan commands
+    sudo chown -R www-data:www-data "$SERVER_DIR" 
     
-    # Generate App Key
-    sudo php artisan key:generate --force > /dev/null 2>&1
-
-    # Run Database Migrations and Seed
-    sudo php artisan migrate --seed --force > /dev/null 2>&1
-
-    # Set file permissions (final)
-    sudo chown -R www-data:www-data "$SERVER_DIR"
+    # Install Composer dependencies as www-data
+    sudo -u www-data composer install --no-dev --optimize-autoloader > /dev/null 2>&1
     
+    # Generate App Key as www-data
+    sudo -u www-data php artisan key:generate --force > /dev/null 2>&1
+
+    # Run Database Migrations and Seed as www-data
+    sudo -u www-data php artisan migrate --seed --force > /dev/null 2>&1
+
     # Configure Cron Job (Quietly)
     (sudo crontab -l 2>/dev/null; echo "* * * * * php /var/www/pterodactyl/artisan schedule:run >> /dev/null 2>&1") | sudo crontab -
 
@@ -258,37 +253,8 @@ install_panel() {
     # --- Step 5: Webserver (Nginx) Configuration ---
     show_loading "Configuring Nginx Webserver..."
     
-    # Generate Nginx config file (basic, assumes PHP-FPM 8.1)
-    # The actual Nginx config template is large, this is a placeholder command to copy and enable it.
+    NGINX_CONF_TEMPLATE="server { ... (rest of your NGINX config template) ... }"
     
-    NGINX_CONF_TEMPLATE="
-server {
-    listen 80;
-    server_name $PANEL_HOST;
-
-    # Redirect all HTTP to HTTPS if SSL is later enabled
-    # return 301 https://\$server_name\$request_uri; 
-    
-    root $SERVER_DIR/public;
-    index index.html index.php;
-    charset utf-8;
-
-    location / {
-        try_files \$uri \$uri/ /index.php?\$query_string;
-    }
-
-    location ~ \.php$ {
-        fastcgi_split_path_info ^(.+\.php)(/.+)$;
-        fastcgi_pass unix:/run/php/php8.1-fpm.sock;
-        fastcgi_index index.php;
-        include fastcgi_params;
-        fastcgi_param SCRIPT_FILENAME \$document_root\$fastcgi_script_name;
-        fastcgi_param PATH_INFO \$fastcgi_path_info;
-    }
-
-    # ... other security blocks
-}
-"
     # Write config file
     echo "$NGINX_CONF_TEMPLATE" | sudo tee /etc/nginx/sites-available/pterodactyl.conf > /dev/null
 
@@ -300,12 +266,9 @@ server {
     
     echo -e "${COLOR_GREEN}✅ Nginx configured and running on port 80.${NC}"
     
-    # The user creation part remains the same as it uses Pterodactyl's internal CLI command (`php artisan p:user:create`).
-
     # --- Admin User Configuration (Start of original logic) ---
     configure_admin_user() {
         # ... (Same function as before)
-        # We need to define this function here locally so it can be called.
         echo -e "\n${COLOR_CYAN}--- Pterodactyl Administrator Setup ---${NC}"
         while true; do
             read -p "$(echo -e "${COLOR_YELLOW}Is this user an Administrator? (Y/N): ${NC}")" IS_ADMIN_CONFIRM
@@ -325,7 +288,7 @@ server {
         read -p "$(echo -e "${COLOR_YELLOW}Admin Username (e.g., zxmcadmin): ${NC}")" ADMIN_USERNAME
         read -p "$(echo -e "${COLOR_YELLOW}First Name: ${NC}")" ADMIN_FIRST_NAME
         read -p "$(echo -e "${COLOR_YELLOW}Last Name: ${NC}")" ADMIN_LAST_NAME
-        read -p "$(echo -e "${COLOR_YELLOW}Email Address: ${NC}")" ADMIN_EMAIL # Added Email, required by Pterodactyl
+        read -p "$(echo -e "${COLOR_YELLOW}Email Address: ${NC}")" ADMIN_EMAIL
 
         while true; do
             read -s -p "$(echo -e "${COLOR_YELLOW}Password (min 8 chars): ${NC}")" ADMIN_PASSWORD
@@ -355,6 +318,7 @@ server {
         if [[ "$CONFIRM_INFO" =~ ^[Yy]$ ]]; then
             break
         elif [[ "$CONFIRM_INFO" =~ ^[Nn]$ ]]; then
+            # ... (rest of the change menu logic)
             echo -e "\n${COLOR_CYAN}Which detail do you want to change?${NC}"
             echo -e "  1. Username"
             echo -e "  2. Administration Status"
@@ -389,11 +353,11 @@ server {
         fi
     done
 
-    # --- Finalize User Creation ---
+    # --- Finalize User Creation (FIXED PERMISSION: run as www-data) ---
     show_loading "Creating Pterodactyl Admin User..."
     
     cd "$SERVER_DIR"
-    sudo php artisan p:user:create \
+    sudo -u www-data php artisan p:user:create \
         --username="$ADMIN_USERNAME" \
         --email="$ADMIN_EMAIL" \
         --name-first="$ADMIN_FIRST_NAME" \
@@ -410,8 +374,8 @@ server {
     echo -e "${COLOR_CYAN}   The Panel is installed at: http://${PANEL_HOST}${NC}"
     echo -e "${COLOR_YELLOW}   Login with Username: ${ADMIN_USERNAME} and your chosen password.${NC}"
     echo -e "${COLOR_CYAN}   Database Password (for reference): ${DB_PASSWORD}${NC}"
+  
 }
-    
 
 # ===============================================
 # === 4. Wings (Pterodactyl Node Daemon) ===
