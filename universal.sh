@@ -40,6 +40,7 @@ title_echo() {
     echo -e "${COLOR_BLUE}===============================================${NC}"
     echo -e "${COLOR_PURPLE} $1 ${NC}"
     echo -e "${COLOR_BLUE}===============================================${NC}"
+}
 
 # Helper function to pause execution and wait for user input
 post_execution_pause() {
