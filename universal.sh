@@ -942,7 +942,7 @@ main_menu() {
             5) clear; install_blueprint; post_execution_pause ;;
             6) clear; install_cloudflare_tunnel; post_execution_pause ;;
             7) clear; change_theme; post_execution_pause ;;
-            8) clear; remove_components; post_execution_pause ;;
+            8) clear; uninstall_components; post_execution_pause ;;
             9) clear; show_system_info; post_execution_pause ;; 
             0) 
                title_echo "EXITING INSTALLER"
