@@ -1,0 +1,113 @@
+<div class="theme-toggle-container">
+    </div>
+
+<div class="header">
+    <h1>Federated Host Status</h1>
+    <p>Connect and view the status of your hosted services via your unique Auth Key.</p>
+    <div style="margin-top: 20px;">
+        <input type="url" id="auth-key-input" placeholder="Enter your Auth Key (status.json URL)" size="60" style="padding: 10px; border-radius: 5px; border: 1px solid var(--border-color); background-color: var(--card-bg); color: var(--text-color);">
+        <button onclick="connectStatusPage()" style="padding: 10px 20px; border: none; border-radius: 5px; background-color: var(--header-gradient-start); color: white; cursor: pointer;">Connect Host</button>
+    </div>
+</div>
+
+<div class="container">
+    <h2>Connected Hosts</h2>
+    <div class="status-grid" id="federated-status-container">
+        </div>
+</div>
+
+<script>
+// ... (The theme toggle logic remains the same)
+
+// --- FEDERATION LOGIC ---
+const CONTAINER = document.getElementById('federated-status-container');
+const HOSTS_STORAGE_KEY = 'connectedHosts';
+
+// Load stored keys on page load
+document.addEventListener('DOMContentLoaded', () => {
+    const storedKeys = JSON.parse(localStorage.getItem(HOSTS_STORAGE_KEY) || '[]');
+    storedKeys.forEach(fetchAndDisplayHost);
+});
+
+function connectStatusPage() {
+    const key = document.getElementById('auth-key-input').value.trim();
+    if (!key.endsWith('/status.json')) {
+        alert("Please enter the full status.json URL as your Auth Key.");
+        return;
+    }
+
+    let storedKeys = JSON.parse(localStorage.getItem(HOSTS_STORAGE_KEY) || '[]');
+    if (!storedKeys.includes(key)) {
+        storedKeys.push(key);
+        localStorage.setItem(HOSTS_STORAGE_KEY, JSON.stringify(storedKeys));
+    }
+    document.getElementById('auth-key-input').value = ''; // Clear input
+    fetchAndDisplayHost(key, true); // Fetch and refresh
+}
+
+function displayHostCard(data) {
+    let overallStatus = data.services.every(s => s.status === 'up') ? 'up' : 'down';
+    let statusClass = overallStatus === 'up' ? 'status-up' : 'status-down';
+
+    const cardHtml = `
+        <div class="card federated-card" id="host-${data.instance_id}">
+            <div style="display: flex; justify-content: space-between; align-items: center;">
+                <h3>${data.owner_name}</h3>
+                <span class="status-badge ${statusClass}">
+                    ${overallStatus === 'up' ? 'OPERATIONAL' : 'OUTAGE'}
+                </span>
+            </div>
+            <p style="color: var(--sub-text-color);">
+                Last Update: ${new Date(data.last_updated).toLocaleTimeString()}
+            </p>
+            <hr style="border: 0; height: 1px; background: var(--border-color); margin: 15px 0;">
+            <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 10px;">
+                <div class="metric-block">
+                    <p style="margin: 0; font-size: 0.9em;">CPU</p>
+                    <div class="metric-value" style="font-size: 1.2em;">${data.metrics.cpu}</div>
+                </div>
+                <div class="metric-block">
+                    <p style="margin: 0; font-size: 0.9em;">RAM</p>
+                    <div class="metric-value" style="font-size: 1.2em;">${data.metrics.ram_used}</div>
+                </div>
+            </div>
+            <a href="${data.instance_url}" target="_blank" style="display: block; text-align: right; margin-top: 15px; color: var(--header-gradient-end); text-decoration: none;">View Full Details &rarr;</a>
+        </div>
+    `;
+
+    // Add or replace the card in the container
+    const existingCard = document.getElementById(`host-${data.instance_id}`);
+    if (existingCard) {
+        existingCard.outerHTML = cardHtml;
+    } else {
+        CONTAINER.insertAdjacentHTML('beforeend', cardHtml);
+    }
+}
+
+function fetchAndDisplayHost(url, isNew = false) {
+    fetch(url, { cache: "no-store" }) // Prevent browser caching the JSON file
+        .then(response => {
+            if (!response.ok) throw new Error('Network response was not ok');
+            return response.json();
+        })
+        .then(data => {
+            displayHostCard(data);
+            if (isNew) {
+                alert(`Successfully connected to ${data.owner_name}`);
+            }
+        })
+        .catch(error => {
+            console.error('Error fetching host status:', url, error);
+            if (isNew) {
+                alert(`Could not connect to the host: ${error.message}. Check if the URL is correct and the JSON file exists.`);
+            }
+            // Optional: Render a "DOWN/ERROR" card if necessary
+        });
+}
+
+// Set up polling to refresh all connected hosts every minute
+setInterval(() => {
+    const storedKeys = JSON.parse(localStorage.getItem(HOSTS_STORAGE_KEY) || '[]');
+    storedKeys.forEach(fetchAndDisplayHost);
+}, 60000); // 60 seconds
+</script>
