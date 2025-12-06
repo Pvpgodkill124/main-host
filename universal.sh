@@ -901,9 +901,8 @@ main_menu() {
         echo -e "${CYAN}=======================================${NC}"
         
         echo -e "Please select an option to install or manage:"
-        echo -e "  1) ${GREEN}Java Manager (Install / Switch Java Versions)${NC}"
-        echo -e "  2) ${GREEN}Minecraft Server Installer (Paper/Forge/etc.)${NC}"
-        echo -e "--- Pterodactyl Installation Options ---"
+        echo -e "  1) ${GREEN}Java Manager (System Update)${NC}"
+        echo -e "  2) ${GREEN}update_system (VPN/Networking Services)${NC}"
         echo -e "  3) ${CYAN}Pterodactyl Panel (Web UI)${NC}"
         echo -e "  4) ${CYAN}Pterodactyl Wings (Node Daemon)${NC}"
         echo -e "  5) ${CYAN}Pterodactyl Blueprint (Extensions)${NC}"
@@ -914,8 +913,8 @@ main_menu() {
 
         # Execute chosen function, WRAPPED in clear commands for a clean flow
         case $main_choice in
-            1) clear; install_java_manager; clear ;; 
-            2) clear; install_mc_server; clear ;;
+            1) clear; update_system; clear ;; 
+            2) clear; install_tailscale; clear ;;
             3) clear; install_panel; clear ;;
             4) clear; install_wings; clear ;;
             5) clear; install_blueprint; clear ;;
