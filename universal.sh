@@ -883,23 +883,27 @@ show_system_info() {
 # ===============================================
 # === Main Menu System ===
 # ===============================================
-# --- Main Menu Function Update ---
+# --- Main Menu Function Update --- 
 main_menu() {
-    # Display ASCII art ONLY on the very first loop iteration
-    if [ -z "$INITIAL_RUN_COMPLETE" ]; then
-        clear
-        echo -e "${CYAN}$ZMC_ART${NC}"
-        INITIAL_RUN_COMPLETE="true"
-    fi
-
+    
     # Loop until user chooses to exit
     while true; do
         
+        # 1. ALWAYS CLEAR THE SCREEN before showing the menu
+        clear
+
+        # 2. Display ASCII art ONLY on the very first loop iteration
+        if [ -z "$INITIAL_RUN_COMPLETE" ]; then
+            echo -e "${COLOR_CYAN}$ZMC_ART${NC}"
+            INITIAL_RUN_COMPLETE="true"
+        fi
+
         # Display the main menu text
-        echo -e "\n${CYAN}=======================================${NC}"
-        echo -e "${CYAN}🚀 Universal Server Management Menu 🚀${NC}"
-        echo -e "${CYAN}=======================================${NC}"
+        echo -e "\n${COLOR_CYAN}=======================================${NC}"
+        echo -e "${COLOR_CYAN}🚀 Universal Server Management Menu 🚀${NC}"
+        echo -e "${COLOR_CYAN}=======================================${NC}"
         
+        # ... (rest of the menu echo statements) ...
         echo -e "Select an option:"
         echo -e "  1. ${COLOR_GREEN}Update${NC} (System Updates)"
         echo -e "  2. ${COLOR_GREEN}Tailscale${NC} (VPN/Networking)"
@@ -912,24 +916,27 @@ main_menu() {
         echo -e "  9. ${COLOR_YELLOW}System Info${NC} (Diagnostics)"
         echo -e "  10. ${COLOR_RED}Exit${NC}"
         
-        read -p "Enter your choice (1-10): " choice
+        read -p "Enter your choice (1-10): " main_choice
 
-        case $choice in
-            1) update_system ;;
-            2) install_tailscale ;;
-            3) install_panel ;;
-            4) install_wings ;;
-            5) install_blueprint ;;
-            6) install_cloudflared ;;
-            7) change_theme ;;
-            8) uninstall_components ;;
-            9) show_system_info ;;
-            10) 
-                title_echo "EXITING INSTALLER"
-                echo -e "${COLOR_CYAN}Thanks for using the ${BRANDING} service! Goodbye! 👋${NC}"
-                exit 0 
-                ;;
-            *) echo -e "${COLOR_RED}Invalid choice. Please enter a number between 1 and 10.${NC}" ;;
+        # Execute chosen function, WRAPPED in clear commands for a clean flow
+        case $main_choice in
+            # The 'clear;' commands inside the case statement are redundant now 
+            # as the function itself should clear at the start.
+            # We will rely on the structure: Clear (Loop start) -> Show Menu -> Run Function -> Clear (Function end) -> Loop Start (Clear)
+            
+            # --- We only need ONE clear command BEFORE the function runs ---
+            1) clear; update_system ;; 
+            2) clear; install_tailscale ;;
+            3) clear; install_java_manager ;; 
+            4) clear; install_mc_server ;;
+            5) clear; install_panel ;;
+            6) clear; install_wings ;;
+            7) clear; install_blueprint ;;
+            8) clear; install_cloudflare_tunnel ;;
+            9) clear; change_theme ;;
+            10) clear; remove_components ;;
+            11) break ;;
+            *) echo -e "${COLOR_RED}Invalid choice. Please select a valid option.${NC}"; sleep 2 ;; # Sleep for visibility
         esac
     done
 }
