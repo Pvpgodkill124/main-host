@@ -39,6 +39,15 @@ title_echo() {
     echo -e "${COLOR_BLUE}===============================================${NC}"
     echo -e "${COLOR_PURPLE} $1 ${NC}"
     echo -e "${COLOR_BLUE}===============================================${NC}"
+
+# Helper function to pause execution and wait for user input
+post_execution_pause() {
+    echo -e "\n${COLOR_CYAN}=======================================${NC}"
+    echo -e "${COLOR_GREEN}Operation complete. Check the output above.${NC}"
+    # Wait for any key press
+    read -n 1 -s -r -p "Press any key to return to the Main Menu..."
+    clear # Clear screen AFTER the user confirms
+
 }
 
 # --- Core Utility Functions ---
@@ -887,27 +896,29 @@ show_system_info() {
 # === Main Menu System ===
 # ===============================================
 # --- Main Menu Function Update --- 
+# ===============================================
+# === Main Menu System (Corrected for Pause) ===
+# ===============================================
+
 main_menu() {
-    
+    # 1. Initial Clear and Splash (Only runs once at the start of the script)
+    if [ -z "$INITIAL_RUN_COMPLETE" ]; then
+        clear
+        echo -e "${COLOR_CYAN}$ZMC_ART${NC}"
+        echo -e "${COLOR_GREEN}$SH_VERSION${NC}"
+        INITIAL_RUN_COMPLETE="true"
+    fi
+
     # Loop until user chooses to exit
     while true; do
         
-        # 1. ALWAYS CLEAR THE SCREEN before showing the menu
-        clear
-
-        # 2. Display ASCII art ONLY on the very first loop iteration
-        if [ -z "$INITIAL_RUN_COMPLETE" ]; then
-            echo -e "${COLOR_CYAN}$ZMC_ART${NC}"
-            echo -e "${COLOR_GREEN}$SH_VERSION${NC}"
-            INITIAL_RUN_COMPLETE="true"
-        fi
-
-        # Display the main menu text
+        # The screen is cleared at the end of the previous cycle (in post_execution_pause), 
+        # so we display the menu immediately.
+        
         echo -e "\n${COLOR_CYAN}=======================================${NC}"
         echo -e "${COLOR_CYAN}🚀 Universal Server Management Menu 🚀${NC}"
         echo -e "${COLOR_CYAN}=======================================${NC}"
         
-        # ... (rest of the menu echo statements) ...
         echo -e "Select an option:"
         echo -e "  1. ${COLOR_GREEN}Update${NC} (System Updates)"
         echo -e "  2. ${COLOR_GREEN}Tailscale${NC} (VPN/Networking)"
@@ -922,22 +933,17 @@ main_menu() {
         
         read -p "Enter your choice (1-9): " main_choice
 
-        # Execute chosen function, WRAPPED in clear commands for a clean flow
+        # Execute chosen function, using the new pause mechanism
         case $main_choice in
-            # The 'clear;' commands inside the case statement are redundant now 
-            # as the function itself should clear at the start.
-            # We will rely on the structure: Clear (Loop start) -> Show Menu -> Run Function -> Clear (Function end) -> Loop Start (Clear)
-            
-            # --- We only need ONE clear command BEFORE the function runs ---
-            1) clear; update_system ;; 
-            2) clear; install_tailscale ;;
-            3) clear; install_panel ;;
-            4) clear; install_wings ;;
-            5) clear; install_blueprint ;;
-            6) clear; install_cloudflare_tunnel ;;
-            7) clear; change_theme ;;
-            8) clear; remove_components ;;
-            9) clear; show_system_info ;; 
+            1) clear; update_system; post_execution_pause ;; 
+            2) clear; install_tailscale; post_execution_pause ;;
+            3) clear; install_panel; post_execution_pause ;;
+            4) clear; install_wings; post_execution_pause ;;
+            5) clear; install_blueprint; post_execution_pause ;;
+            6) clear; install_cloudflare_tunnel; post_execution_pause ;;
+            7) clear; change_theme; post_execution_pause ;;
+            8) clear; remove_components; post_execution_pause ;;
+            9) clear; show_system_info; post_execution_pause ;; 
             0) 
                title_echo "EXITING INSTALLER"
                 echo -e "${COLOR_CYAN}Thanks for using the ${BRANDING} service! Goodbye! 👋${NC}"
@@ -946,6 +952,7 @@ main_menu() {
             *) echo -e "${COLOR_RED}Invalid choice. Please enter a number between 1 and 10.${NC}" ;;
         esac
     done
+    clear
 }
                        
 # --- Start the Main Menu ---
