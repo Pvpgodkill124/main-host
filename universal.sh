@@ -205,30 +205,39 @@ install_panel() {
     sudo apt -y install software-properties-common curl apt-transport-https ca-certificates gnupg > /dev/null 2>&1
     sudo add-apt-repository ppa:ondrej/php -y > /dev/null 2>&1
     sudo apt update > /dev/null 2>&1
+    # Note: Using php8.1-fpm to match the Nginx config below
     sudo apt -y install php8.1 php8.1-{cli,gd,mysql,pdo,mbstring,tokenizer,bcmath,xml,fpm,curl,zip} nginx mariadb-server unzip git composer > /dev/null 2>&1
     
     if [ $? -ne 0 ]; then
-        echo -e "${COLOR_RED}❌ Failed to install required dependencies. Exiting.${NC}"
+        echo -e "${COLOR_RED}❌ Failed to install required dependencies. Exiting. Check logs for missing packages.${NC}"
         return
     fi
     echo -e "${COLOR_GREEN}✅ Core dependencies installed (Nginx, MariaDB, PHP 8.1).${NC}"
     
-    # --- Step 2: Database Setup ---
+    # --- Step 2: Database Setup (FIXED REDUNDANCY) ---
     show_loading "Setting up MariaDB Database..."
     DB_PASSWORD=$(cat /dev/urandom | tr -dc 'a-zA-Z0-9' | fold -w 16 | head -n 1)
     DB_NAME="pterodactyl"
     DB_USER="pterodactyl_user"
     
-    sudo mysql -e "CREATE DATABASE $DB_NAME;"
-    sudo mysql -e "CREATE USER '$DB_USER'@'127.0.0.1' IDENTIFIED BY '$DB_PASSWORD';"
+    # Add || true to ignore the error if the database or user already exists
+    sudo mysql -e "CREATE DATABASE $DB_NAME;" || true
+    sudo mysql -e "CREATE USER '$DB_USER'@'127.0.0.1' IDENTIFIED BY '$DB_PASSWORD';" || true
+    
+    # GRANT and FLUSH must succeed
     sudo mysql -e "GRANT ALL PRIVILEGES ON $DB_NAME.* TO '$DB_USER'@'127.0.0.1' WITH GRANT OPTION;"
     sudo mysql -e "FLUSH PRIVILEGES;"
-    echo -e "${COLOR_GREEN}✅ Database created successfully.${NC}"
+    
+    if [ $? -ne 0 ]; then
+        echo -e "${COLOR_RED}❌ Failed to grant database privileges. Exiting.${NC}"
+        return
+    fi
+    echo -e "${COLOR_GREEN}✅ Database configuration finalized.${NC}"
     
     # --- Step 3: Pterodactyl Files & Permissions ---
     show_loading "Downloading Pterodactyl files..."
     sudo mkdir -p "$SERVER_DIR"
-    cd "$SERVER_DIR"
+    cd "$SERVER_DIR" || return
     curl -Lo panel.tar.gz https://github.com/pterodactyl/panel/releases/latest/download/panel.tar.gz > /dev/null 2>&1
     sudo tar -xzvf panel.tar.gz > /dev/null 2>&1
     sudo chmod -R 755 storage/* bootstrap/cache/
@@ -240,9 +249,8 @@ install_panel() {
     sudo sed -i "s/DB_DATABASE=homestead/DB_DATABASE=$DB_NAME/" .env
     sudo sed -i "s/DB_USERNAME=homestead/DB_USERNAME=$DB_USER/" .env
     sudo sed -i "s/DB_PASSWORD=secret/DB_PASSWORD=$DB_PASSWORD/" .env
-    sudo sed -i "s|APP_URL=http://localhost|APP_URL=https://$PANEL_HOST|" .env
+    sudo sed -i "s|APP_URL=http://localhost|APP_URL=http://$PANEL_HOST|" .env # Use http initially
 
-    # Run these as www-data after initial setup, before final chown
     # Set file ownership early for Composer/Artisan commands
     sudo chown -R www-data:www-data "$SERVER_DIR" 
     
@@ -256,30 +264,72 @@ install_panel() {
     sudo -u www-data php artisan migrate --seed --force > /dev/null 2>&1
 
     # Configure Cron Job (Quietly)
-    (sudo crontab -l 2>/dev/null; echo "* * * * * php /var/www/pterodactyl/artisan schedule:run >> /dev/null 2>&1") | sudo crontab -
+    (sudo crontab -l 2>/dev/null; echo "* * * * * php $SERVER_DIR/artisan schedule:run >> /dev/null 2>&1") | sudo crontab -
 
     echo -e "${COLOR_GREEN}✅ Panel core installed and configured.${NC}"
     
-    # --- Step 5: Webserver (Nginx) Configuration ---
+    # --- Step 5: Webserver (Nginx) Configuration (FIXED CONFIG TEMPLATE) ---
     show_loading "Configuring Nginx Webserver..."
     
-    NGINX_CONF_TEMPLATE="server { ... (rest of your NGINX config template) ... }"
+    # Use a robust Heredoc block for multi-line Nginx config
+    sudo cat > /etc/nginx/sites-available/pterodactyl.conf << EOF
+server {
+    listen 80;
+    server_name $PANEL_HOST;
+
+    root $SERVER_DIR/public;
+    index index.html index.php;
     
-    # Write config file
-    echo "$NGINX_CONF_TEMPLATE" | sudo tee /etc/nginx/sites-available/pterodactyl.conf > /dev/null
+    charset utf-8;
+    gzip on;
+    gzip_types text/css application/javascript text/javascript application/x-javascript image/svg+xml text/plain text/xml application/xml application/json;
+
+    location / {
+        try_files \$uri \$uri/ /index.php?\$query_string;
+    }
+
+    location ~ \.php$ {
+        fastcgi_split_path_info ^(.+\.php)(/.+)$;
+        fastcgi_pass unix:/run/php/php8.1-fpm.sock;
+        fastcgi_index index.php;
+        include fastcgi_params;
+        fastcgi_param PHP_VALUE "upload_max_filesize = 100M \n post_max_size = 100M";
+        fastcgi_param SCRIPT_FILENAME \$document_root\$fastcgi_script_name;
+        fastcgi_param HTTP_PROXY "";
+        fastcgi_read_timeout 300s;
+    }
+
+    location ~ /\.ht {
+        deny all;
+    }
+}
+EOF
 
     # Enable site and restart Nginx
     sudo ln -s /etc/nginx/sites-available/pterodactyl.conf /etc/nginx/sites-enabled/ > /dev/null 2>&1
     sudo rm /etc/nginx/sites-enabled/default 2>/dev/null
     sudo systemctl restart nginx
-    sudo systemctl enable nginx
     
+    # Check if Nginx restarted successfully
+    if [ $? -ne 0 ]; then
+        echo -e "${COLOR_RED}❌ Nginx failed to start! Check your configuration with 'nginx -t' and 'systemctl status nginx'. Exiting.${NC}"
+        return
+    fi
+    
+    sudo systemctl enable nginx > /dev/null 2>&1
     echo -e "${COLOR_GREEN}✅ Nginx configured and running on port 80.${NC}"
     
-    # --- Admin User Configuration (Start of original logic) ---
+    # --- Admin User Configuration (Your original working logic) ---
     configure_admin_user() {
         # ... (Same function as before)
         echo -e "\n${COLOR_CYAN}--- Pterodactyl Administrator Setup ---${NC}"
+        # Set default values if running again
+        ADMIN_USERNAME=${ADMIN_USERNAME:-""}
+        ADMIN_FIRST_NAME=${ADMIN_FIRST_NAME:-""}
+        ADMIN_LAST_NAME=${ADMIN_LAST_NAME:-""}
+        ADMIN_EMAIL=${ADMIN_EMAIL:-""}
+        IS_ADMIN=${IS_ADMIN:-"1"}
+
         while true; do
             read -p "$(echo -e "${COLOR_YELLOW}Is this user an Administrator? (Y/N): ${NC}")" IS_ADMIN_CONFIRM
             if [[ "$IS_ADMIN_CONFIRM" =~ ^[Yy]$ ]]; then
@@ -328,7 +378,6 @@ install_panel() {
         if [[ "$CONFIRM_INFO" =~ ^[Yy]$ ]]; then
             break
         elif [[ "$CONFIRM_INFO" =~ ^[Nn]$ ]]; then
-            # ... (rest of the change menu logic)
             echo -e "\n${COLOR_CYAN}Which detail do you want to change?${NC}"
             echo -e "  1. Username"
             echo -e "  2. Administration Status"
@@ -363,10 +412,10 @@ install_panel() {
         fi
     done
 
-    # --- Finalize User Creation (FIXED PERMISSION: run as www-data) ---
+    # --- Finalize User Creation ---
     show_loading "Creating Pterodactyl Admin User..."
     
-    cd "$SERVER_DIR"
+    cd "$SERVER_DIR" || return
     sudo -u www-data php artisan p:user:create \
         --username="$ADMIN_USERNAME" \
         --email="$ADMIN_EMAIL" \
@@ -376,7 +425,7 @@ install_panel() {
         --admin="$IS_ADMIN" > /dev/null 2>&1
         
     if [ $? -ne 0 ]; then
-        echo -e "${COLOR_RED}❌ Failed to create Pterodactyl user. Please check logs/permissions.${NC}"
+        echo -e "${COLOR_RED}❌ Failed to create Pterodactyl user. The command may have failed, or the user already exists. Try logging in.${NC}"
         return
     fi
     
