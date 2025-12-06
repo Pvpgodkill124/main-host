@@ -920,7 +920,7 @@ main_menu() {
         echo -e "  9. ${COLOR_YELLOW}System Info${NC} (Diagnostics)"
         echo -e "  0. ${COLOR_RED}Exit${NC}"
         
-        read -p "Enter your choice (1-10): " main_choice
+        read -p "Enter your choice (1-9): " main_choice
 
         # Execute chosen function, WRAPPED in clear commands for a clean flow
         case $main_choice in
