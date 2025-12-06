@@ -123,6 +123,7 @@ update_system() {
 
     show_loading "Starting $PACKAGE_MANAGER update..."
     # Hide all update logs
+    sudo $UPDATE_COMMAND -o Acquire::AllowInsecureRepositories=true -o Acquire::AllowDowngradeToInsecure=true
     $UPDATE_COMMAND > /dev/null 2>&1
     
     if [ $? -ne 0 ]; then
