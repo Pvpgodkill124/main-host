@@ -1,5 +1,4 @@
 #!/bin/bash
-set -n
 
 # ===============================================
 # ZXMC Universal Installer
