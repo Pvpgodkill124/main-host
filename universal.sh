@@ -925,3 +925,6 @@ main_menu() {
         esac
     done
 }
+# --- Start the Main Menu ---
+main_menu
+
