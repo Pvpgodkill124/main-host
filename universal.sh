@@ -2,7 +2,7 @@
 
 # ===============================================
 # ZXMC Universal Installer
-# Version: 1.0.0
+# Version: 1.2.1
 # Author: Gemini AI
 # ===============================================
 
@@ -927,19 +927,23 @@ main_menu() {
             # --- We only need ONE clear command BEFORE the function runs ---
             1) clear; update_system ;; 
             2) clear; install_tailscale ;;
-            3) clear; install_java_manager ;; 
-            4) clear; install_mc_server ;;
-            5) clear; install_panel ;;
-            6) clear; install_wings ;;
-            7) clear; install_blueprint ;;
-            8) clear; install_cloudflare_tunnel ;;
-            9) clear; change_theme ;;
-            10) clear; remove_components ;;
-            11) break ;;
-            *) echo -e "${COLOR_RED}Invalid choice. Please select a valid option.${NC}"; sleep 2 ;; # Sleep for visibility
+            3) clear; install_panel ;;
+            4) clear; install_wings ;;
+            5) clear; install_blueprint ;;
+            6) clear; install_cloudflare_tunnel ;;
+            7) clear; change_theme ;;
+            8) clear; remove_components ;;
+            9) clear; show_system_info ;; 
+            0) 
+               title_echo "EXITING INSTALLER"
+                echo -e "${COLOR_CYAN}Thanks for using the ${BRANDING} service! Goodbye! 👋${NC}"
+                exit 0 
+                ;;
+            *) echo -e "${COLOR_RED}Invalid choice. Please enter a number between 1 and 10.${NC}" ;;
         esac
     done
 }
+                       
 # --- Start the Main Menu ---
 main_menu
 
