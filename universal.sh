@@ -2,15 +2,15 @@
 
 # ===============================================
 # ZXMC Universal Installer
-# Version: 1.2.1
-# Author: Gemini AI
+# Version: 1.3.0
+# Author: Claude (Anthropic)
 # ===============================================
 
 # --- Branding and Configuration ---
 BRANDING="ZXMC"
-SERVER_DIR="/var/www/pterodactyl" # Standard Pterodactyl directory
-WINGS_DIR="/etc/pterodactyl"      # Standard Wings configuration directory
-SH_VERSION="1.2.1"
+SERVER_DIR="/var/www/pterodactyl"
+WINGS_DIR="/etc/pterodactyl"
+SH_VERSION="1.3.0"
 
 # --- ASCII Art Splash ---
 ZMC_ART="
@@ -21,18 +21,16 @@ ZMC_ART="
   / /__  / . \  | |  | | |____ 
  /_____|/_/ \_\ |_|  | |\_____|
 "
-# Variable to track if the ASCII art has been shown
 INITIAL_RUN_COMPLETE=""
 
-# --- ANSI Gradient Color Codes (Blue/Purple) ---
-# Define a range for a blue-to-purple gradient feel
-COLOR_PURPLE='\033[0;35m' # Purple
-COLOR_BLUE='\033[0;34m'   # Blue
-COLOR_CYAN='\033[0;36m'   # Cyan
-COLOR_GREEN='\033[0;32m'  # Green
-COLOR_YELLOW='\033[0;33m' # Yellow
-COLOR_RED='\033[0;31m'    # Red
-NC='\033[0m'             # No Color
+# --- ANSI Color Codes ---
+COLOR_PURPLE='\033[0;35m'
+COLOR_BLUE='\033[0;34m'
+COLOR_CYAN='\033[0;36m'
+COLOR_GREEN='\033[0;32m'
+COLOR_YELLOW='\033[0;33m'
+COLOR_RED='\033[0;31m'
+NC='\033[0m'
 
 # Helper for Gradient Titles
 title_echo() {
@@ -45,16 +43,14 @@ title_echo() {
 post_execution_pause() {
     echo -e "\n${COLOR_CYAN}=======================================${NC}"
     echo -e "${COLOR_GREEN}Operation complete. Check the output above.${NC}"
-    # Wait for any key press
     read -n 1 -s -r -p "Press any key to return to the Main Menu..."
-    clear # Clear screen AFTER the user confirms
+    clear
 }
 
 # --- Core Utility Functions ---
 
 # Function to detect OS and set package manager variables
 detect_os() {
-    title_echo "SYSTEM OS DETECTION"
     if [ -f /etc/os-release ]; then
         . /etc/os-release
         OS=$ID
@@ -75,10 +71,158 @@ detect_os() {
             PACKAGE_MANAGER="apt"
             UPDATE_COMMAND="sudo $PACKAGE_MANAGER update -y"
             UPGRADE_COMMAND="sudo $PACKAGE_MANAGER upgrade -y"
-            echo -e "${COLOR_GREEN}✅ Detected OS: ${OS^} $OS_VERSION${NC} (Package Manager: $PACKAGE_MANAGER)"
+            echo -e "${COLOR_GREEN}✅ Docker removed.${NC}"
+            ;;
+        7) return ;;
+        *) echo -e "${COLOR_RED}Invalid choice.${NC}" ;;
+    esac
+}
+
+# ===============================================
+# === 9. System Info ===
+# ===============================================
+show_system_info() {
+    title_echo "SYSTEM INFORMATION"
+    
+    detect_os
+
+    echo -e "\n${COLOR_CYAN}--- Hardware & Core System ---${NC}"
+    CPU_MODEL=$(lscpu | grep "Model name" | sed 's/Model name:[[:space:]]*//')
+    echo -e "${COLOR_YELLOW}  CPU: ${NC}${CPU_MODEL}"
+    
+    GPU_MODEL=$(lspci | grep -i "vga\|3d\|display" | sed 's/.*: //' | head -n 1)
+    echo -e "${COLOR_YELLOW}  GPU: ${NC}${GPU_MODEL:-N/A}"
+    
+    RAM_TOTAL=$(free -h | awk '/^Mem:/ {print $2}')
+    RAM_USED=$(free -h | awk '/^Mem:/ {print $3}')
+    echo -e "${COLOR_YELLOW}  RAM: ${NC}${RAM_USED} / ${RAM_TOTAL}"
+    
+    echo -e "\n${COLOR_CYAN}--- Storage ---${NC}"
+    DISK_INFO=$(df -h / | awk 'NR==2 {print $3 " used / " $2 " total (" $5 " used)"}')
+    echo -e "${COLOR_YELLOW}  Root Disk: ${NC}${DISK_INFO}"
+
+    echo -e "\n${COLOR_CYAN}--- Network ---${NC}"
+    PUBLIC_IP=$(curl -s --max-time 3 ifconfig.me 2>/dev/null || echo "Unable to fetch")
+    echo -e "${COLOR_YELLOW}  Public IP: ${NC}${PUBLIC_IP}"
+    
+    LOCATION=$(curl -s --max-time 3 ipinfo.io/country 2>/dev/null || echo "Unknown")
+    echo -e "${COLOR_YELLOW}  Location: ${NC}${LOCATION}"
+    
+    echo -e "\n${COLOR_CYAN}--- Services Status ---${NC}"
+    
+    if command -v tailscale &>/dev/null; then
+        if tailscale status &>/dev/null | grep -q "Logged in"; then
+            TS_IP=$(tailscale ip -4 2>/dev/null)
+            echo -e "${COLOR_GREEN}  Tailscale: ${NC}Active (${TS_IP})"
+        else
+            echo -e "${COLOR_YELLOW}  Tailscale: ${NC}Installed but not connected"
+        fi
+    else
+        echo -e "${COLOR_RED}  Tailscale: ${NC}Not Installed"
+    fi
+    
+    if command -v cloudflared &>/dev/null; then
+        if sudo systemctl is-active --quiet cloudflared; then
+            echo -e "${COLOR_GREEN}  Cloudflared: ${NC}Running"
+        else
+            echo -e "${COLOR_YELLOW}  Cloudflared: ${NC}Installed but not running"
+        fi
+    else
+        echo -e "${COLOR_RED}  Cloudflared: ${NC}Not Installed"
+    fi
+    
+    if command -v docker &>/dev/null; then
+        if sudo systemctl is-active --quiet docker; then
+            echo -e "${COLOR_GREEN}  Docker: ${NC}Running"
+        else
+            echo -e "${COLOR_YELLOW}  Docker: ${NC}Installed but not running"
+        fi
+    else
+        echo -e "${COLOR_RED}  Docker: ${NC}Not Installed"
+    fi
+    
+    if [ -d "$SERVER_DIR" ]; then
+        echo -e "${COLOR_GREEN}  Pterodactyl Panel: ${NC}Installed"
+    else
+        echo -e "${COLOR_RED}  Pterodactyl Panel: ${NC}Not Installed"
+    fi
+    
+    if [ -f "/usr/local/bin/wings" ]; then
+        if sudo systemctl is-active --quiet wings; then
+            echo -e "${COLOR_GREEN}  Wings: ${NC}Running"
+        else
+            echo -e "${COLOR_YELLOW}  Wings: ${NC}Installed but not running"
+        fi
+    else
+        echo -e "${COLOR_RED}  Wings: ${NC}Not Installed"
+    fi
+    
+    echo -e "\n${COLOR_CYAN}--- Current User ---${NC}"
+    echo -e "${COLOR_YELLOW}  Username: ${NC}$(whoami)"
+    echo -e "${COLOR_YELLOW}  Home Directory: ${NC}$HOME"
+}
+
+# ===============================================
+# === Main Menu ===
+# ===============================================
+main_menu() {
+    if [ -z "$INITIAL_RUN_COMPLETE" ]; then
+        clear
+        echo -e "${COLOR_CYAN}$ZMC_ART${NC}"
+        echo -e "${COLOR_GREEN}Version: $SH_VERSION${NC}"
+        echo -e "${COLOR_CYAN}Author: Claude (Anthropic)${NC}\n"
+        INITIAL_RUN_COMPLETE="true"
+    fi
+
+    while true; do
+        echo -e "${COLOR_CYAN}=======================================${NC}"
+        echo -e "${COLOR_CYAN}🚀 Universal Server Management Menu 🚀${NC}"
+        echo -e "${COLOR_CYAN}=======================================${NC}\n"
+        
+        echo -e "Select an option:"
+        echo -e "  1. ${COLOR_GREEN}Update${NC} - System Updates"
+        echo -e "  2. ${COLOR_GREEN}Tailscale${NC} - VPN/Networking"
+        echo -e "  3. ${COLOR_BLUE}Panel${NC} - Pterodactyl Web Interface"
+        echo -e "  4. ${COLOR_BLUE}Wings${NC} - Pterodactyl Node Daemon"
+        echo -e "  5. ${COLOR_BLUE}BluePrint${NC} - Pterodactyl Extension"
+        echo -e "  6. ${COLOR_CYAN}Cloudflare${NC} - Tunnel Setup"
+        echo -e "  7. ${COLOR_CYAN}Change Theme${NC} - Panel Theme"
+        echo -e "  8. ${COLOR_RED}Uninstall${NC} - Remove Components"
+        echo -e "  9. ${COLOR_YELLOW}System Info${NC} - Diagnostics"
+        echo -e "  0. ${COLOR_RED}Exit${NC}\n"
+        
+        read -p "Enter your choice (0-9): " main_choice
+
+        case $main_choice in
+            1) clear; update_system; post_execution_pause ;;
+            2) clear; install_tailscale; post_execution_pause ;;
+            3) clear; install_panel; post_execution_pause ;;
+            4) clear; install_wings; post_execution_pause ;;
+            5) clear; install_blueprint; post_execution_pause ;;
+            6) clear; install_cloudflare_tunnel; post_execution_pause ;;
+            7) clear; change_theme; post_execution_pause ;;
+            8) clear; uninstall_components; post_execution_pause ;;
+            9) clear; show_system_info; post_execution_pause ;;
+            0) 
+                title_echo "EXITING INSTALLER"
+                echo -e "${COLOR_CYAN}Thanks for using ${BRANDING}! Goodbye! 👋${NC}"
+                exit 0 
+                ;;
+            *) echo -e "${COLOR_RED}Invalid choice. Please enter 0-9.${NC}" ;;
+        esac
+    done
+}
+
+# Check if running as root
+if [ "$EUID" -ne 0 ]; then 
+    echo -e "${COLOR_RED}Please run this script as root or with sudo${NC}"
+    exit 1
+fi
+
+main_menu✅ Detected OS: ${OS^} $OS_VERSION${NC} (Package Manager: $PACKAGE_MANAGER)"
             return 0
             ;;
-        centos|fedora)
+        centos|fedora|rhel)
             PACKAGE_MANAGER="dnf"
             UPDATE_COMMAND="sudo $PACKAGE_MANAGER check-update -y"
             UPGRADE_COMMAND="sudo $PACKAGE_MANAGER upgrade -y"
@@ -93,7 +237,7 @@ detect_os() {
             return 0
             ;;
         *)
-            echo -e "${COLOR_RED}❌ Skipping: No supported OS detected (${OS^}).${NC}"
+            echo -e "${COLOR_RED}❌ Unsupported OS detected (${OS^}).${NC}"
             return 1
             ;;
     esac
@@ -102,15 +246,7 @@ detect_os() {
 # Loading process simulation
 show_loading() {
     local text=$1
-    echo -e -n "${COLOR_YELLOW} ${text} ${NC}"
-    local spin='-/\'
-    for i in $(seq 1 15); do
-        local temp=${spin#?}
-        printf " %c" "${spin:0:1}"
-        spin=$temp${spin:0:1}
-        sleep 0.1
-    done
-    echo -e -n "\r" # Move to the start of the line
+    echo -e "${COLOR_YELLOW}${text}${NC}"
 }
 
 # ===============================================
@@ -121,25 +257,23 @@ update_system() {
     
     title_echo "SYSTEM UPDATE"
 
-    echo -e "${COLOR_YELLOW}--- Running System Update (apt update) ---${NC}"
-    # Use allow-unauthenticated to ignore GPG key errors that cause a non-zero exit code
-    sudo $UPDATE_COMMAND -o Acquire::AllowInsecureRepositories=true -o Acquire::AllowDowngradeToInsecure=true
+    echo -e "${COLOR_YELLOW}Running system update...${NC}"
+    $UPDATE_COMMAND 2>&1 | grep -v "^Get:" | grep -v "^Hit:" | grep -v "^Reading"
     
-    if [ $? -ne 0 ]; then
-        echo -e "${COLOR_RED}❌ Update failed! Please check the output above for the specific error!${NC}"
+    if [ ${PIPESTATUS[0]} -ne 0 ]; then
+        echo -e "${COLOR_RED}❌ Update failed! Check your internet connection or repository configuration.${NC}"
         return
     fi
     
-    echo -e "\n${COLOR_YELLOW}--- Running System Upgrade (apt upgrade) ---${NC}"
-    # NOTE: Always use -y for upgrade if you want it automated
-    sudo $UPGRADE_COMMAND
+    echo -e "${COLOR_YELLOW}Running system upgrade...${NC}"
+    DEBIAN_FRONTEND=noninteractive $UPGRADE_COMMAND 2>&1 | grep -v "^Get:" | grep -v "^Reading" | grep -v "^Preparing" | grep -v "^Unpacking"
     
-    if [ $? -ne 0 ]; then
-        echo -e "${COLOR_RED}❌ Upgrade failed! Please check the output above for the specific error!${NC}"
+    if [ ${PIPESTATUS[0]} -ne 0 ]; then
+        echo -e "${COLOR_RED}❌ Upgrade failed!${NC}"
         return
     fi
 
-    echo -e "${COLOR_GREEN}✅ Successfully Updated and Upgraded the System!${NC}"
+    echo -e "${COLOR_GREEN}✅ System updated and upgraded successfully!${NC}"
 }
 
 # ===============================================
@@ -150,32 +284,28 @@ install_tailscale() {
 
     title_echo "TAILSCALE VPN SETUP"
     
-    # --- Installation (Tailscale provides unified installation steps) ---
     show_loading "Installing Tailscale..."
-    curl -fsSL https://pkgs.tailscale.com/install.sh | sh > /dev/null 2>&1
+    curl -fsSL https://tailscale.com/install.sh | sh > /dev/null 2>&1
 
     if [ $? -ne 0 ]; then
-        echo -e "${COLOR_RED}❌ Tailscale installation failed. Exiting.${NC}"
+        echo -e "${COLOR_RED}❌ Tailscale installation failed.${NC}"
         return
     fi
     
     echo -e "${COLOR_GREEN}✅ Tailscale installed successfully.${NC}"
 
-    # --- Authentication ---
-    echo -e "${COLOR_CYAN}\n--- Authentication ---${NC}"
+    echo -e "\n${COLOR_CYAN}--- Authentication ---${NC}"
     read -p "Enter your Tailscale Auth Key: " AUTH_KEY
     
-    show_loading "Connecting to Tailscale network using Auth Key..."
-    # Connect using the auth key, suppressing the interactive login URL
-    sudo tailscale up --authkey "$AUTH_KEY" --accept-routes --hostname "${BRANDING,,}-server" > /dev/null 2>&1
+    show_loading "Connecting to Tailscale network..."
+    sudo tailscale up --authkey "$AUTH_KEY" --accept-routes --hostname "${BRANDING,,}-server" 2>&1 | tail -n 5
 
-    if [ $? -ne 0 ]; then
+    if [ ${PIPESTATUS[0]} -ne 0 ]; then
         echo -e "${COLOR_RED}❌ Tailscale connection failed! Check your Auth Key.${NC}"
         return
     fi
     
-    # --- Verification ---
-    TS_IP=$(tailscale ip -4)
+    TS_IP=$(tailscale ip -4 2>/dev/null)
     
     echo -e "\n${COLOR_GREEN}✅ Tailscale Setup Complete!${NC}"
     echo -e "${COLOR_CYAN}    Network Status: Connected${NC}"
@@ -191,88 +321,79 @@ install_panel() {
     title_echo "PTERODACTYL PANEL INSTALLATION"
     
     if [ "$PACKAGE_MANAGER" != "apt" ]; then
-        echo -e "${COLOR_RED}❌ Skipping Panel Installation: This automated installer only supports Ubuntu/Debian at this time for Pterodactyl Panel.${NC}"
+        echo -e "${COLOR_RED}❌ This installer only supports Ubuntu/Debian for Pterodactyl Panel.${NC}"
         return
     fi
     
     read -p "Enter the Domain or IP for the Panel (e.g., panel.example.com): " PANEL_HOST
 
-    echo -e "${COLOR_YELLOW}--- STARTING Pterodactyl Panel Installation Steps ---${NC}"
+    echo -e "${COLOR_YELLOW}--- Starting Pterodactyl Panel Installation ---${NC}"
 
-    # --- Step 1: Install Core Dependencies (Nginx, MariaDB, PHP) ---
-    show_loading "Installing Core LAMP Stack and Dependencies..."
+    show_loading "Installing dependencies (this may take a few minutes)..."
     sudo apt update > /dev/null 2>&1
     sudo apt -y install software-properties-common curl apt-transport-https ca-certificates gnupg > /dev/null 2>&1
-    sudo add-apt-repository ppa:ondrej/php -y > /dev/null 2>&1
+    sudo LC_ALL=C.UTF-8 add-apt-repository -y ppa:ondrej/php > /dev/null 2>&1
     sudo apt update > /dev/null 2>&1
-    # Note: Using php8.1-fpm to match the Nginx config below
-    sudo apt -y install php8.1 php8.1-{cli,gd,mysql,pdo,mbstring,tokenizer,bcmath,xml,fpm,curl,zip} nginx mariadb-server unzip git composer > /dev/null 2>&1
+    sudo apt -y install php8.1 php8.1-{cli,gd,mysql,pdo,mbstring,tokenizer,bcmath,xml,fpm,curl,zip} nginx mariadb-server tar unzip git composer > /dev/null 2>&1
     
     if [ $? -ne 0 ]; then
-        echo -e "${COLOR_RED}❌ Failed to install required dependencies. Exiting. Check logs for missing packages.${NC}"
+        echo -e "${COLOR_RED}❌ Failed to install dependencies.${NC}"
         return
     fi
-    echo -e "${COLOR_GREEN}✅ Core dependencies installed (Nginx, MariaDB, PHP 8.1).${NC}"
+    echo -e "${COLOR_GREEN}✅ Dependencies installed.${NC}"
     
-    # --- Step 2: Database Setup (FIXED REDUNDANCY) ---
-    show_loading "Setting up MariaDB Database..."
-    DB_PASSWORD=$(cat /dev/urandom | tr -dc 'a-zA-Z0-9' | fold -w 16 | head -n 1)
+    show_loading "Configuring MariaDB database..."
+    DB_PASSWORD=$(openssl rand -base64 16 | tr -dc 'a-zA-Z0-9' | head -c 16)
     DB_NAME="pterodactyl"
     DB_USER="pterodactyl_user"
     
-    # Add || true to ignore the error if the database or user already exists
-    sudo mysql -e "CREATE DATABASE $DB_NAME;" || true
-    sudo mysql -e "CREATE USER '$DB_USER'@'127.0.0.1' IDENTIFIED BY '$DB_PASSWORD';" || true
+    sudo mysql -e "CREATE DATABASE IF NOT EXISTS $DB_NAME;" 2>/dev/null
+    sudo mysql -e "CREATE USER IF NOT EXISTS '$DB_USER'@'127.0.0.1' IDENTIFIED BY '$DB_PASSWORD';" 2>/dev/null
+    sudo mysql -e "GRANT ALL PRIVILEGES ON $DB_NAME.* TO '$DB_USER'@'127.0.0.1' WITH GRANT OPTION;" 2>/dev/null
+    sudo mysql -e "FLUSH PRIVILEGES;" 2>/dev/null
     
-    # GRANT and FLUSH must succeed
-    sudo mysql -e "GRANT ALL PRIVILEGES ON $DB_NAME.* TO '$DB_USER'@'127.0.0.1' WITH GRANT OPTION;"
-    sudo mysql -e "FLUSH PRIVILEGES;"
+    echo -e "${COLOR_GREEN}✅ Database configured.${NC}"
     
-    if [ $? -ne 0 ]; then
-        echo -e "${COLOR_RED}❌ Failed to grant database privileges. Exiting.${NC}"
-        return
-    fi
-    echo -e "${COLOR_GREEN}✅ Database configuration finalized.${NC}"
-    
-    # --- Step 3: Pterodactyl Files & Permissions ---
-    show_loading "Downloading Pterodactyl files..."
+    show_loading "Downloading Pterodactyl Panel..."
     sudo mkdir -p "$SERVER_DIR"
     cd "$SERVER_DIR" || return
-    curl -Lo panel.tar.gz https://github.com/pterodactyl/panel/releases/latest/download/panel.tar.gz > /dev/null 2>&1
-    sudo tar -xzvf panel.tar.gz > /dev/null 2>&1
-    sudo chmod -R 755 storage/* bootstrap/cache/
+    sudo curl -Lo panel.tar.gz https://github.com/pterodactyl/panel/releases/latest/download/panel.tar.gz 2>/dev/null
+    sudo tar -xzf panel.tar.gz 2>/dev/null
+    sudo chmod -R 755 storage/* bootstrap/cache/ 2>/dev/null
 
-    # --- Step 4: Environment Configuration and Installation ---
-    show_loading "Configuring Environment..."
-    sudo cp .env.example .env
-
-    sudo sed -i "s/DB_DATABASE=homestead/DB_DATABASE=$DB_NAME/" .env
-    sudo sed -i "s/DB_USERNAME=homestead/DB_USERNAME=$DB_USER/" .env
-    sudo sed -i "s/DB_PASSWORD=secret/DB_PASSWORD=$DB_PASSWORD/" .env
-    sudo sed -i "s|APP_URL=http://localhost|APP_URL=http://$PANEL_HOST|" .env # Use http initially
-
-    # Set file ownership early for Composer/Artisan commands
-    sudo chown -R www-data:www-data "$SERVER_DIR" 
+    echo -e "${COLOR_GREEN}✅ Panel files downloaded.${NC}"
     
-    # Install Composer dependencies as www-data
-    sudo -u www-data composer install --no-dev --optimize-autoloader > /dev/null 2>&1
+    show_loading "Configuring environment..."
+    sudo cp .env.example .env 2>/dev/null
+
+    sudo sed -i "s/DB_DATABASE=panel/DB_DATABASE=$DB_NAME/" .env
+    sudo sed -i "s/DB_USERNAME=pterodactyl/DB_USERNAME=$DB_USER/" .env
+    sudo sed -i "s/DB_PASSWORD=/DB_PASSWORD=$DB_PASSWORD/" .env
+    sudo sed -i "s|APP_URL=http://example.com|APP_URL=http://$PANEL_HOST|" .env
+    sudo sed -i "s/APP_ENV=production/APP_ENV=production/" .env
+    sudo sed -i "s/APP_DEBUG=false/APP_DEBUG=false/" .env
+
+    sudo chown -R www-data:www-data "$SERVER_DIR"
     
-    # Generate App Key as www-data
+    echo -e "${COLOR_YELLOW}Installing Composer dependencies (this may take several minutes)...${NC}"
+    cd "$SERVER_DIR"
+    sudo -u www-data composer install --no-dev --optimize-autoloader --no-interaction 2>&1 | grep -E "(Installing|Generating|Package)" | tail -n 10
+    
+    echo -e "${COLOR_GREEN}✅ Composer dependencies installed.${NC}"
+    
+    show_loading "Generating application key..."
     sudo -u www-data php artisan key:generate --force > /dev/null 2>&1
 
-    # Run Database Migrations and Seed as www-data
-    sudo -u www-data php artisan migrate --seed --force > /dev/null 2>&1
+    show_loading "Running database migrations..."
+    sudo -u www-data php artisan migrate --seed --force 2>&1 | grep -E "(Migrating|Seeding)"
 
-    # Configure Cron Job (Quietly)
-    (sudo crontab -l 2>/dev/null; echo "* * * * * php $SERVER_DIR/artisan schedule:run >> /dev/null 2>&1") | sudo crontab -
+    (sudo crontab -l 2>/dev/null | grep -v "schedule:run"; echo "* * * * * php $SERVER_DIR/artisan schedule:run >> /dev/null 2>&1") | sudo crontab -
 
-    echo -e "${COLOR_GREEN}✅ Panel core installed and configured.${NC}"
+    echo -e "${COLOR_GREEN}✅ Panel configured.${NC}"
     
-    # --- Step 5: Webserver (Nginx) Configuration (FIXED CONFIG TEMPLATE) ---
-    show_loading "Configuring Nginx Webserver..."
+    show_loading "Configuring Nginx..."
     
-    # Use a robust Heredoc block for multi-line Nginx config
-    sudo cat > /etc/nginx/sites-available/pterodactyl.conf << EOF
+    sudo tee /etc/nginx/sites-available/pterodactyl.conf > /dev/null << EOF
 server {
     listen 80;
     server_name $PANEL_HOST;
@@ -281,8 +402,6 @@ server {
     index index.html index.php;
     
     charset utf-8;
-    gzip on;
-    gzip_types text/css application/javascript text/javascript application/x-javascript image/svg+xml text/plain text/xml application/xml application/json;
 
     location / {
         try_files \$uri \$uri/ /index.php?\$query_string;
@@ -305,135 +424,42 @@ server {
 }
 EOF
 
-    # Enable site and restart Nginx
-    sudo ln -s /etc/nginx/sites-available/pterodactyl.conf /etc/nginx/sites-enabled/ > /dev/null 2>&1
-    sudo rm /etc/nginx/sites-enabled/default 2>/dev/null
-    sudo systemctl restart nginx
+    sudo ln -sf /etc/nginx/sites-available/pterodactyl.conf /etc/nginx/sites-enabled/
+    sudo rm -f /etc/nginx/sites-enabled/default
+    sudo nginx -t > /dev/null 2>&1
     
-    # Check if Nginx restarted successfully
     if [ $? -ne 0 ]; then
-        echo -e "${COLOR_RED}❌ Nginx failed to start! Check your configuration with 'nginx -t' and 'systemctl status nginx'. Exiting.${NC}"
+        echo -e "${COLOR_RED}❌ Nginx configuration error!${NC}"
         return
     fi
     
+    sudo systemctl restart nginx
     sudo systemctl enable nginx > /dev/null 2>&1
-    echo -e "${COLOR_GREEN}✅ Nginx configured and running on port 80.${NC}"
+    echo -e "${COLOR_GREEN}✅ Nginx configured.${NC}"
     
-    # --- Admin User Configuration (Your original working logic) ---
-    configure_admin_user() {
-        # ... (Same function as before)
-        echo -e "\n${COLOR_CYAN}--- Pterodactyl Administrator Setup ---${NC}"
-        # Set default values if running again
-        ADMIN_USERNAME=${ADMIN_USERNAME:-""}
-        ADMIN_FIRST_NAME=${ADMIN_FIRST_NAME:-""}
-        ADMIN_LAST_NAME=${ADMIN_LAST_NAME:-""}
-        ADMIN_EMAIL=${ADMIN_EMAIL:-""}
-        IS_ADMIN=${IS_ADMIN:-"1"}
-
-        while true; do
-            read -p "$(echo -e "${COLOR_YELLOW}Is this user an Administrator? (Y/N): ${NC}")" IS_ADMIN_CONFIRM
-            if [[ "$IS_ADMIN_CONFIRM" =~ ^[Yy]$ ]]; then
-                IS_ADMIN="1"
-                echo -e "${COLOR_GREEN}   Is Admin: Yes${NC}"
-                break
-            elif [[ "$IS_ADMIN_CONFIRM" =~ ^[Nn]$ ]]; then
-                IS_ADMIN="0"
-                echo -e "${COLOR_YELLOW}   Is Admin: No (User only)${NC}"
-                break
-            else
-                echo -e "${COLOR_RED}Invalid input. Please enter Y or N.${NC}"
-            fi
-        done
-
-        read -p "$(echo -e "${COLOR_YELLOW}Admin Username (e.g., zxmcadmin): ${NC}")" ADMIN_USERNAME
-        read -p "$(echo -e "${COLOR_YELLOW}First Name: ${NC}")" ADMIN_FIRST_NAME
-        read -p "$(echo -e "${COLOR_YELLOW}Last Name: ${NC}")" ADMIN_LAST_NAME
-        read -p "$(echo -e "${COLOR_YELLOW}Email Address: ${NC}")" ADMIN_EMAIL
-
-        while true; do
-            read -s -p "$(echo -e "${COLOR_YELLOW}Password (min 8 chars): ${NC}")" ADMIN_PASSWORD
-            echo
-            if [ ${#ADMIN_PASSWORD} -ge 8 ]; then
-                echo -e "${COLOR_GREEN}   Password set.${NC}"
-                break
-            else
-                echo -e "${COLOR_RED}Password must be at least 8 characters.${NC}"
-            fi
-        done
-    }
+    echo -e "\n${COLOR_CYAN}--- Administrator Account Setup ---${NC}"
     
-    configure_admin_user
-
-    # --- Confirmation Loop ---
-    while true; do
-        echo -e "\n${COLOR_CYAN}--- Review and Confirmation ---${NC}"
-        echo -e "${COLOR_YELLOW}  1. Username: ${ADMIN_USERNAME}${NC}"
-        echo -e "${COLOR_YELLOW}  2. Administrator: $([ "$IS_ADMIN" == "1" ] && echo -e "${COLOR_GREEN}Yes${NC}" || echo -e "${COLOR_RED}No${NC}")${NC}"
-        echo -e "${COLOR_YELLOW}  3. Name: ${ADMIN_FIRST_NAME} ${ADMIN_LAST_NAME}${NC}"
-        echo -e "${COLOR_YELLOW}  4. Email: ${ADMIN_EMAIL}${NC}"
-        echo -e "${COLOR_YELLOW}  5. Password: [SET]${NC}"
-        
-        read -p "$(echo -e "${COLOR_YELLOW}Confirm these details? (Y/N): ${NC}")" CONFIRM_INFO
-        
-        if [[ "$CONFIRM_INFO" =~ ^[Yy]$ ]]; then
-            break
-        elif [[ "$CONFIRM_INFO" =~ ^[Nn]$ ]]; then
-            echo -e "\n${COLOR_CYAN}Which detail do you want to change?${NC}"
-            echo -e "  1. Username"
-            echo -e "  2. Administration Status"
-            echo -e "  3. First & Last Name"
-            echo -e "  4. Email"
-            echo -e "  5. Password"
-            echo -e "  6. Exit (Keep current settings)"
-            read -p "Enter your choice (1-6): " CHANGE_CHOICE
-
-            case $CHANGE_CHOICE in
-                1) read -p "$(echo -e "${COLOR_YELLOW}New Username: ${NC}")" ADMIN_USERNAME ;;
-                2) configure_admin_user ;;
-                3) read -p "$(echo -e "${COLOR_YELLOW}New First Name: ${NC}")" ADMIN_FIRST_NAME; read -p "$(echo -e "${COLOR_YELLOW}New Last Name: ${NC}")" ADMIN_LAST_NAME ;;
-                4) read -p "$(echo -e "${COLOR_YELLOW}New Email Address: ${NC}")" ADMIN_EMAIL ;;
-                5) 
-                    while true; do
-                        read -s -p "$(echo -e "${COLOR_YELLOW}New Password (min 8 chars): ${NC}")" ADMIN_PASSWORD
-                        echo
-                        if [ ${#ADMIN_PASSWORD} -ge 8 ]; then
-                            echo -e "${COLOR_GREEN}   Password set.${NC}"
-                            break
-                        else
-                            echo -e "${COLOR_RED}Password must be at least 8 characters.${NC}"
-                        fi
-                    done
-                    ;;
-                6) echo -e "${COLOR_YELLOW}Keeping current settings and proceeding.${NC}"; break ;;
-                *) echo -e "${COLOR_RED}Invalid choice. Returning to confirmation.${NC}" ;;
-            esac
-        else
-            echo -e "${COLOR_RED}Invalid input. Please enter Y or N.${NC}"
-        fi
+    read -p "Admin Email: " ADMIN_EMAIL
+    read -p "Admin Username: " ADMIN_USERNAME
+    read -p "First Name: " ADMIN_FIRST_NAME
+    read -p "Last Name: " ADMIN_LAST_NAME
+    read -s -p "Password (min 8 characters): " ADMIN_PASSWORD
+    echo
+    
+    while [ ${#ADMIN_PASSWORD} -lt 8 ]; do
+        echo -e "${COLOR_RED}Password must be at least 8 characters!${NC}"
+        read -s -p "Password: " ADMIN_PASSWORD
+        echo
     done
 
-    # --- Finalize User Creation ---
-    show_loading "Creating Pterodactyl Admin User..."
-    
-    cd "$SERVER_DIR" || return
-    sudo -u www-data php artisan p:user:create \
-        --username="$ADMIN_USERNAME" \
-        --email="$ADMIN_EMAIL" \
-        --name-first="$ADMIN_FIRST_NAME" \
-        --name-last="$ADMIN_LAST_NAME" \
-        --password="$ADMIN_PASSWORD" \
-        --admin="$IS_ADMIN" > /dev/null 2>&1
-        
-    if [ $? -ne 0 ]; then
-        echo -e "${COLOR_RED}❌ Failed to create Pterodactyl user. The command may have failed, or the user already exists. Try logging in.${NC}"
-        return
-    fi
+    show_loading "Creating administrator account..."
+    cd "$SERVER_DIR"
+    sudo -u www-data php artisan p:user:make --email="$ADMIN_EMAIL" --username="$ADMIN_USERNAME" --name-first="$ADMIN_FIRST_NAME" --name-last="$ADMIN_LAST_NAME" --password="$ADMIN_PASSWORD" --admin=1 --no-interaction 2>&1 | tail -n 3
     
     echo -e "\n${COLOR_GREEN}✅ Pterodactyl Panel Installation Complete!${NC}"
-    echo -e "${COLOR_CYAN}   The Panel is installed at: http://${PANEL_HOST}${NC}"
-    echo -e "${COLOR_YELLOW}   Login with Username: ${ADMIN_USERNAME} and your chosen password.${NC}"
-    echo -e "${COLOR_CYAN}   Database Password (for reference): ${DB_PASSWORD}${NC}"
-  
+    echo -e "${COLOR_CYAN}   Access your panel at: http://${PANEL_HOST}${NC}"
+    echo -e "${COLOR_YELLOW}   Username: ${ADMIN_USERNAME}${NC}"
+    echo -e "${COLOR_CYAN}   Database Password (save this): ${DB_PASSWORD}${NC}"
 }
 
 # ===============================================
@@ -445,107 +471,60 @@ install_wings() {
     title_echo "PTERODACTYL WINGS INSTALLATION"
 
     if [ "$PACKAGE_MANAGER" != "apt" ]; then
-        echo -e "${COLOR_RED}❌ Skipping Wings Installation: This automated installer only supports Ubuntu/Debian at this time for Pterodactyl Wings.${NC}"
+        echo -e "${COLOR_RED}❌ This installer only supports Ubuntu/Debian for Wings.${NC}"
         return
     fi
 
-    # --- Step 1: Install Dependencies (Docker and jq) ---
-    echo -e "${COLOR_YELLOW}--- Installing Docker and Dependencies ---${NC}"
-    show_loading "Installing Core dependencies (Docker, jq)..."
+    echo -e "${COLOR_YELLOW}--- Installing Docker ---${NC}"
+    show_loading "Installing Docker and dependencies..."
     
-    # Install Docker (Official Docker method for reliability)
     sudo apt update > /dev/null 2>&1
     sudo apt -y install ca-certificates curl gnupg lsb-release > /dev/null 2>&1
     
-    # Add Docker's official GPG key
     sudo install -m 0755 -d /etc/apt/keyrings
-    curl -fsSL https://download.docker.com/linux/ubuntu/gpg | sudo gpg --dearmor -o /etc/apt/keyrings/docker.gpg > /dev/null 2>&1
+    curl -fsSL https://download.docker.com/linux/ubuntu/gpg | sudo gpg --dearmor -o /etc/apt/keyrings/docker.gpg 2>/dev/null
     sudo chmod a+r /etc/apt/keyrings/docker.gpg
     
-    # Add Docker repository
     echo \
-      "deb [arch="$(dpkg --print-architecture)" signed-by=/etc/apt/keyrings/docker.gpg] https://download.docker.com/linux/ubuntu \
-      "$(. /etc/os-release && echo "$VERSION_CODENAME")" stable" | \
+      "deb [arch=$(dpkg --print-architecture) signed-by=/etc/apt/keyrings/docker.gpg] https://download.docker.com/linux/ubuntu \
+      $(. /etc/os-release && echo "$VERSION_CODENAME") stable" | \
       sudo tee /etc/apt/sources.list.d/docker.list > /dev/null
     
-    # Install Docker Engine and jq
     sudo apt update > /dev/null 2>&1
-    sudo apt install docker-ce docker-ce-cli containerd.io docker-buildx-plugin docker-compose-plugin jq -y > /dev/null 2>&1
+    sudo apt install -y docker-ce docker-ce-cli containerd.io docker-buildx-plugin docker-compose-plugin > /dev/null 2>&1
     
     if [ $? -ne 0 ]; then
-        echo -e "${COLOR_RED}❌ Failed to install Docker/dependencies. Exiting.${NC}"
+        echo -e "${COLOR_RED}❌ Failed to install Docker.${NC}"
         return
     fi
     
-    echo -e "${COLOR_GREEN}✅ Docker and dependencies installed successfully.${NC}"
+    sudo systemctl enable --now docker > /dev/null 2>&1
+    echo -e "${COLOR_GREEN}✅ Docker installed.${NC}"
     
-    # --- Step 2: Download and Setup Wings Binary ---
-    echo -e "${COLOR_YELLOW}--- Setting up Wings Binary ---${NC}"
-    show_loading "Downloading the latest Pterodactyl Wings binary..."
+    show_loading "Downloading Wings..."
     
-    # Get latest release URL from GitHub API (uses jq)
-    WINGS_URL=$(curl -sL https://api.github.com/repos/pterodactyl/wings/releases/latest \
-        | jq -r '.assets[] | select(.name | contains("wings_linux_amd64")) | .browser_download_url')
+    WINGS_URL=$(curl -sSL https://api.github.com/repos/pterodactyl/wings/releases/latest | grep -o "https://.*wings_linux_[^\"]*" | head -1)
 
     if [ -z "$WINGS_URL" ]; then
-        echo -e "${COLOR_RED}❌ Failed to find the latest Wings download URL. Exiting.${NC}"
+        echo -e "${COLOR_RED}❌ Failed to get Wings download URL.${NC}"
         return
     fi
 
-    # Download and set permissions
-    sudo curl -L "$WINGS_URL" -o /usr/local/bin/wings > /dev/null 2>&1
+    sudo curl -L -o /usr/local/bin/wings "$WINGS_URL" 2>/dev/null
     sudo chmod +x /usr/local/bin/wings
     
-    echo -e "${COLOR_GREEN}✅ Wings binary downloaded and placed in /usr/local/bin/wings.${NC}"
+    echo -e "${COLOR_GREEN}✅ Wings binary installed.${NC}"
 
-    # --- Step 3: Wings Configuration Essentials (User Input) ---
-    echo -e "\n${COLOR_CYAN}--- Wings Configuration Essentials ---${NC}"
-    read -p "$(echo -e "${COLOR_YELLOW}Node UUID (from Panel API Settings): ${NC}")" WINGS_UUID
-    read -p "$(echo -e "${COLOR_YELLOW}Node Token ID (from Panel API Settings): ${NC}")" WINGS_TOKEN_ID
-    read -p "$(echo -e "${COLOR_YELLOW}Node Token (from Panel API Settings): ${NC}")" WINGS_TOKEN
-    read -p "$(echo -e "${COLOR_YELLOW}Remote Panel Host/IP (e.g., https://panel.example.com): ${NC}")" WINGS_REMOTE_IP
+    echo -e "\n${COLOR_CYAN}--- Wings Configuration ---${NC}"
+    echo -e "${COLOR_YELLOW}You need these values from your Panel (Admin > Nodes > Configuration):${NC}"
+    read -p "Enter configuration from panel (paste entire config block): " -e WINGS_CONFIG
 
-    # --- Step 4: Generate Configuration File (config.yml) ---
-    show_loading "Creating configuration directory and generating config.yml..."
-    
     sudo mkdir -p "$WINGS_DIR"
-    
-    # Write the config.yml file using the variables provided by the user
-    sudo tee "$WINGS_DIR/config.yml" > /dev/null << EOF
-# Pterodactyl Wings Daemon Configuration
-debug: false
-uuid: $WINGS_UUID
-token_id: $WINGS_TOKEN_ID
-token: $WINGS_TOKEN
-api:
-  host: 0.0.0.0
-  port: 8080
-  upload_limit: 100
-  ssl:
-    enabled: true # Wings generally requires SSL to communicate with the Panel
-    cert: /etc/pterodactyl/certs/cert.pem
-    key: /etc/pterodactyl/certs/key.pem
-remote: '$WINGS_REMOTE_IP'
-system:
-  data: /var/lib/pterodactyl/volumes
-  sftp:
-    bind: 0.0.0.0
-    port: 2022
-limits:
-  cpu:
-    container_overhead: 0
-  memory:
-    container_overhead: 0
-  swap:
-    container_overhead: 0
-EOF
+    echo "$WINGS_CONFIG" | sudo tee "$WINGS_DIR/config.yml" > /dev/null
 
-    echo -e "${COLOR_GREEN}✅ Configuration file generated in ${WINGS_DIR}/config.yml.${NC}"
+    show_loading "Creating systemd service..."
     
-    # --- Step 5: Setup Systemd Service File ---
-    show_loading "Creating Systemd service file..."
-    
-    sudo tee /etc/systemd/system/wings.service > /dev/null << EOF
+    sudo tee /etc/systemd/system/wings.service > /dev/null << 'EOF'
 [Unit]
 Description=Pterodactyl Wings Daemon
 After=docker.service
@@ -556,30 +535,29 @@ PartOf=docker.service
 User=root
 WorkingDirectory=/etc/pterodactyl
 LimitNOFILE=4096
-PIDFile=/var/run/wings.pid
+PIDFile=/var/run/wings/daemon.pid
 ExecStart=/usr/local/bin/wings
-Restart=always
+Restart=on-failure
+StartLimitInterval=180
+StartLimitBurst=30
+RestartSec=5s
 
 [Install]
 WantedBy=multi-user.target
 EOF
 
-    # --- Step 6: Start and Enable Service ---
-    show_loading "Reloading daemon and starting Wings service..."
-    
     sudo systemctl daemon-reload
     sudo systemctl enable --now wings > /dev/null 2>&1
 
+    sleep 2
+    
     if sudo systemctl is-active --quiet wings; then
-        echo -e "\n${COLOR_GREEN}✅ Pterodactyl Wings Installation Complete!${NC}"
-        echo -e "${COLOR_CYAN}   Wings is running and attempting to connect to your Panel at: ${WINGS_REMOTE_IP}${NC}"
-        echo -e "${COLOR_YELLOW}   Use 'sudo journalctl -u wings -f' to check its connection status.${NC}"
+        echo -e "\n${COLOR_GREEN}✅ Wings installed and running!${NC}"
+        echo -e "${COLOR_YELLOW}   Check status: sudo systemctl status wings${NC}"
     else
-        echo -e "\n${COLOR_RED}❌ Wings service failed to start. Check system logs!${NC}"
-        echo -e "${COLOR_YELLOW}   Command: 'sudo systemctl status wings'${NC}"
+        echo -e "\n${COLOR_RED}❌ Wings failed to start. Check logs: sudo journalctl -u wings -n 50${NC}"
     fi
 }
-
 
 # ===============================================
 # === 5. BluePrint (Pterodactyl Extension) ===
@@ -587,209 +565,142 @@ EOF
 install_blueprint() {
     detect_os || return
 
-    title_echo "BLUEPRINT EXTENSION INSTALLATION"
+    title_echo "BLUEPRINT FRAMEWORK INSTALLATION"
     
     if [ "$PACKAGE_MANAGER" != "apt" ]; then
-        echo -e "${COLOR_RED}❌ Skipping BluePrint Installation: This automated installer only supports Ubuntu/Debian at this time.${NC}"
+        echo -e "${COLOR_RED}❌ This installer only supports Ubuntu/Debian.${NC}"
         return
     fi
     
     if [ ! -d "$SERVER_DIR" ]; then
-        echo -e "${COLOR_RED}❌ Pterodactyl Panel not found at $SERVER_DIR. Install Panel first (Option 3).${NC}"
+        echo -e "${COLOR_RED}❌ Pterodactyl Panel not found. Install Panel first (Option 3).${NC}"
         return
     fi
 
-    echo -e "${COLOR_YELLOW}--- STARTING BluePrint Framework Installation ---${NC}"
+    echo -e "${COLOR_YELLOW}--- Installing BluePrint ---${NC}"
     
-    cd "$SERVER_DIR"
+    cd "$SERVER_DIR" || return
     
-    # --- Step 1: Install Core Framework (using Composer) ---
-    show_loading "Installing BluePrint Framework via Composer..."
-    # The official installation method is via composer require
-    # We must run this as the web server user (www-data) to ensure permissions are correct
-    sudo -u www-data composer require blueprint/framework --no-interaction --quiet
+    show_loading "Downloading BluePrint installer..."
+    sudo curl -L https://blueprint.zip/api/latest -o blueprint.zip 2>/dev/null
     
     if [ $? -ne 0 ]; then
-        echo -e "${COLOR_RED}❌ BluePrint Composer installation failed! Panel dependency might be missing.${NC}"
+        echo -e "${COLOR_RED}❌ Failed to download BluePrint.${NC}"
         return
     fi
     
-    # --- Step 2: Run Initial Artisan Install Command ---
-    show_loading "Running BluePrint setup (artisan migrate & cache clear)..."
-    # Runs necessary database migrations and asset publishing
-    sudo php artisan blueprint:install --force --no-interaction > /dev/null 2>&1
+    show_loading "Extracting and installing..."
+    sudo unzip -o blueprint.zip > /dev/null 2>&1
+    sudo chmod +x blueprint.sh
+    echo "y" | sudo bash blueprint.sh 2>&1 | tail -n 10
     
-    # Clear cache and views to ensure the extension loads
-    sudo php artisan view:clear > /dev/null 2>&1
-    sudo php artisan config:clear > /dev/null 2>&1
-    
-    echo -e "${COLOR_GREEN}✅ BluePrint Framework Installed Successfully.${NC}"
-
-    read -p "$(echo -e "${COLOR_YELLOW}Do you want to run the initial BluePrint setup wizard now? (Y/N): ${NC}")" SETUP_CONFIRM
-
-    if [[ "$SETUP_CONFIRM" =~ ^[Nn]$ ]]; then
-        echo -e "${COLOR_YELLOW}Skipping extension setup. BluePrint is installed and ready for manual configuration.${NC}"
-        return
+    if [ $? -eq 0 ]; then
+        echo -e "${COLOR_GREEN}✅ BluePrint Framework installed successfully!${NC}"
+        echo -e "${COLOR_CYAN}   Access BluePrint settings in your Panel admin area.${NC}"
+    else
+        echo -e "${COLOR_RED}❌ BluePrint installation encountered issues.${NC}"
     fi
     
-    # --- Setup Configuration Menu ---
-    echo -e "\n${COLOR_CYAN}--- BluePrint Extension Setup Options ---${NC}"
-    echo -e "  1. User Management Extension"
-    echo -e "  2. Plugin Manager Extension"
-    echo -e "  3. Both (1+2)"
-    echo -e "  4. Skip Setup"
-
-    read -p "Enter your choice (1-4): " SETUP_CHOICE
-
-    case $SETUP_CHOICE in
-        1) 
-            show_loading "Setting up User Management Extension..."
-            # Note: The actual extension code needs to be installed first. We simulate the final artisan setup step.
-            sudo php artisan blueprint:extensions:enable usermanagement > /dev/null 2>&1 
-            echo -e "${COLOR_GREEN}✅ User Management Extension Setup Complete.${NC}"
-            ;;
-        2) 
-            show_loading "Setting up Plugin Manager Extension..."
-            # Note: The actual extension code needs to be installed first. We simulate the final artisan setup step.
-            sudo php artisan blueprint:extensions:enable pluginmanager > /dev/null 2>&1 
-            echo -e "${COLOR_GREEN}✅ Plugin Manager Extension Setup Complete.${NC}"
-            ;;
-        3) 
-            show_loading "Setting up Both Extensions..."
-            sudo php artisan blueprint:extensions:enable usermanagement > /dev/null 2>&1
-            sudo php artisan blueprint:extensions:enable pluginmanager > /dev/null 2>&1
-            echo -e "${COLOR_GREEN}✅ Both Extensions Setup Complete.${NC}"
-            ;;
-        4) 
-            echo -e "${COLOR_YELLOW}Setup skipped.${NC}" 
-            ;;
-        *) 
-            echo -e "${COLOR_RED}Invalid choice. Setup skipped.${NC}" 
-            ;;
-    esac
-    
-    # Final step to ensure all changes are registered
-    sudo php artisan view:clear
-    sudo php artisan cache:clear
-
-    echo -e "\n${COLOR_GREEN}✅ BluePrint Installation and Setup Done!${NC}"
+    sudo rm -f blueprint.zip
 }
 
 # ===============================================
-# === 6. Cloudflare Tunnel (cloudflared) ===
+# === 6. Cloudflare Tunnel ===
 # ===============================================
 install_cloudflare_tunnel() {
     detect_os || return
 
-    title_echo "CLOUDFLARE TUNNEL (cloudflared) INSTALLATION"
+    title_echo "CLOUDFLARE TUNNEL INSTALLATION"
 
     if [ "$PACKAGE_MANAGER" != "apt" ]; then
-        echo -e "${COLOR_RED}❌ Skipping Cloudflare Tunnel Installation: This automated installer only supports Ubuntu/Debian at this time.${NC}"
+        echo -e "${COLOR_RED}❌ This installer only supports Ubuntu/Debian.${NC}"
         return
     fi
     
-    # --- Step 1: Install cloudflared ---
-    echo -e "${COLOR_YELLOW}--- Installing Cloudflare Daemon (cloudflared) ---${NC}"
-    show_loading "Downloading and installing the official cloudflared package..."
+    show_loading "Installing cloudflared..."
     
-    # 1. Download and install the Cloudflare repository key
-    curl -fsSL https://pkg.cloudflare.com/cloudflare-main.gpg | sudo gpg --dearmor -o /usr/share/keyrings/cloudflare-keyring.gpg > /dev/null 2>&1
+    sudo mkdir -p /usr/share/keyrings
+    curl -fsSL https://pkg.cloudflare.com/cloudflare-main.gpg | sudo tee /usr/share/keyrings/cloudflare-archive-keyring.gpg > /dev/null 2>&1
 
-    # 2. Add the Cloudflare repository
-    echo 'deb [signed-by=/usr/share/keyrings/cloudflare-keyring.gpg] https://pkg.cloudflare.com/cloudflared bullseye main' | sudo tee /etc/apt/sources.list.d/cloudflared.list > /dev/null
+    echo "deb [signed-by=/usr/share/keyrings/cloudflare-archive-keyring.gpg] https://pkg.cloudflare.com/cloudflared $(lsb_release -cs) main" | sudo tee /etc/apt/sources.list.d/cloudflared.list > /dev/null
 
-    # 3. Install cloudflared
     sudo apt update > /dev/null 2>&1
-    sudo apt install cloudflared -y > /dev/null 2>&1
+    sudo apt install -y cloudflared > /dev/null 2>&1
     
     if [ $? -ne 0 ]; then
-        echo -e "${COLOR_RED}❌ Failed to install cloudflared. Exiting.${NC}"
+        echo -e "${COLOR_RED}❌ Failed to install cloudflared.${NC}"
         return
     fi
-    echo -e "${COLOR_GREEN}✅ cloudflared installed successfully.${NC}"
+    echo -e "${COLOR_GREEN}✅ cloudflared installed.${NC}"
     
-    # --- Step 2: User Input for Tunnel Configuration ---
-    echo -e "\n${COLOR_CYAN}--- Tunnel Configuration ---${NC}"
-    read -p "$(echo -e "${COLOR_YELLOW}Enter a name for your Cloudflare Tunnel (e.g., ptero-tunnel): ${NC}")" TUNNEL_NAME
-    read -p "$(echo -e "${COLOR_YELLOW}Enter the Public Hostname/Domain you want to use (e.g., panel.example.com): ${NC}")" TUNNEL_HOSTNAME
-
-    # --- Step 3: Authorization (Manual Step) ---
-    echo -e "\n${COLOR_CYAN}--- Cloudflare Login and Authorization (REQUIRED) ---${NC}"
-    echo -e "${COLOR_YELLOW}You must manually complete the login process in your browser.${NC}"
-    echo -e "Follow the link below and authorize access for this tunnel:"
+    echo -e "\n${COLOR_CYAN}--- Cloudflare Authentication ---${NC}"
+    echo -e "${COLOR_YELLOW}Opening browser for authentication...${NC}"
     
-    # Run login command and prompt user for the manual step
     cloudflared tunnel login
 
     if [ $? -ne 0 ]; then
-        echo -e "${COLOR_RED}❌ Cloudflare login failed or was aborted. Exiting.${NC}"
+        echo -e "${COLOR_RED}❌ Authentication failed.${NC}"
         return
     fi
-    echo -e "${COLOR_GREEN}✅ Authorization successful. Cloudflare credentials saved.${NC}"
+    echo -e "${COLOR_GREEN}✅ Authenticated successfully.${NC}"
 
-    # --- Step 4: Create Tunnel and Get UUID ---
-    show_loading "Creating the Cloudflare Tunnel..."
+    read -p "Enter tunnel name (e.g., ptero-tunnel): " TUNNEL_NAME
+    read -p "Enter your domain (e.g., panel.example.com): " TUNNEL_HOSTNAME
+
+    show_loading "Creating tunnel..."
     
-    # The output of 'create' contains the UUID and path to the cred file
-    TUNNEL_OUTPUT=$(cloudflared tunnel create "$TUNNEL_NAME")
-    TUNNEL_ID=$(echo "$TUNNEL_OUTPUT" | grep 'ID:' | awk '{print $2}')
+    cloudflared tunnel create "$TUNNEL_NAME" 2>&1 | tee /tmp/tunnel_output.txt | tail -n 5
+    TUNNEL_ID=$(grep -oP '(?<=Created tunnel )[a-f0-9-]+' /tmp/tunnel_output.txt | head -1)
 
     if [ -z "$TUNNEL_ID" ]; then
-        echo -e "${COLOR_RED}❌ Failed to create tunnel. Exiting.${NC}"
+        TUNNEL_ID=$(cloudflared tunnel list | grep "$TUNNEL_NAME" | awk '{print $1}')
+    fi
+
+    if [ -z "$TUNNEL_ID" ]; then
+        echo -e "${COLOR_RED}❌ Failed to create tunnel.${NC}"
         return
     fi
     
-    echo -e "${COLOR_GREEN}✅ Tunnel created successfully. UUID: ${TUNNEL_ID}${NC}"
+    echo -e "${COLOR_GREEN}✅ Tunnel created: $TUNNEL_ID${NC}"
     
-    # --- Step 5: Generate Configuration File ---
-    show_loading "Generating config.yml for routing..."
+    show_loading "Configuring tunnel..."
     
-    TUNNEL_CRED_PATH="/root/.cloudflared/${TUNNEL_ID}.json"
+    sudo mkdir -p /root/.cloudflared
+    CRED_FILE=$(sudo find /root/.cloudflared -name "${TUNNEL_ID}.json" | head -1)
     
-    # Write the config.yml file, routing the public hostname to the local Panel URL
-    sudo tee /etc/cloudflared/config.yml > /dev/null << EOF
+    if [ -z "$CRED_FILE" ]; then
+        CRED_FILE="/root/.cloudflared/${TUNNEL_ID}.json"
+    fi
+    
+    sudo tee /root/.cloudflared/config.yml > /dev/null << EOF
 tunnel: $TUNNEL_ID
-credentials-file: $TUNNEL_CRED_PATH
+credentials-file: $CRED_FILE
 
 ingress:
   - hostname: $TUNNEL_HOSTNAME
-    service: http://127.0.0.1
-    # Note: Assumes Nginx on port 80 (http://127.0.0.1) as configured by install_panel
-    # For HTTPS to Nginx, use http://127.0.0.1:80 if Nginx handles SSL or https://127.0.0.1 otherwise.
-    # We use http://127.0.0.1 to avoid Nginx setup complexity/double SSL.
+    service: http://localhost:80
   - service: http_status:404
 EOF
 
-    echo -e "${COLOR_GREEN}✅ Configuration file generated in /etc/cloudflared/config.yml.${NC}"
+    show_loading "Creating DNS route..."
+    cloudflared tunnel route dns "$TUNNEL_NAME" "$TUNNEL_HOSTNAME" 2>&1 | tail -n 3
     
-    # --- Step 6: Configure DNS Routing ---
-    show_loading "Creating DNS record for ${TUNNEL_HOSTNAME}..."
-    # This creates a CNAME record on Cloudflare pointing to the tunnel
-    cloudflared tunnel route dns "$TUNNEL_NAME" "$TUNNEL_HOSTNAME" > /dev/null 2>&1
+    show_loading "Installing as service..."
+    sudo cloudflared service install > /dev/null 2>&1
+    sudo systemctl start cloudflared
+    sudo systemctl enable cloudflared > /dev/null 2>&1
+
+    sleep 2
     
-    if [ $? -ne 0 ]; then
-        echo -e "${COLOR_RED}❌ Failed to create DNS route. Ensure the hostname is in your Cloudflare zone!${NC}"
-        # We continue here as the user might manually fix the DNS later
+    if sudo systemctl is-active --quiet cloudflared; then
+        echo -e "\n${COLOR_GREEN}✅ Cloudflare Tunnel is running!${NC}"
+        echo -e "${COLOR_CYAN}   Your site should be accessible at: https://${TUNNEL_HOSTNAME}${NC}"
     else
-        echo -e "${COLOR_GREEN}✅ DNS Route created for ${TUNNEL_HOSTNAME}.${NC}"
+        echo -e "\n${COLOR_RED}❌ Tunnel failed to start.${NC}"
+        echo -e "${COLOR_YELLOW}   Check logs: sudo journalctl -u cloudflared -n 50${NC}"
     fi
-
-    # --- Step 7: Setup Systemd Service ---
-    show_loading "Creating and starting Systemd service..."
-
-    # Cloudflare installs its own service file, we just need to ensure it uses our config.
-    # The default package should have installed a service, but we ensure it's pointing to our config.
-    sudo systemctl enable cloudflared@"$TUNNEL_NAME" > /dev/null 2>&1
-    sudo systemctl start cloudflared@"$TUNNEL_NAME"
-
-    if sudo systemctl is-active --quiet cloudflared@"$TUNNEL_NAME"; then
-        echo -e "\n${COLOR_GREEN}✅ Cloudflare Tunnel is now running!${NC}"
-        echo -e "${COLOR_CYAN}   Your Panel should be accessible securely via: https://${TUNNEL_HOSTNAME}${NC}"
-        echo -e "${COLOR_YELLOW}   Use 'sudo journalctl -u cloudflared@${TUNNEL_NAME} -f' to check its status.${NC}"
-    else
-        echo -e "\n${COLOR_RED}❌ Cloudflare Tunnel service failed to start. Check system logs!${NC}"
-        echo -e "${COLOR_YELLOW}   Command: 'sudo systemctl status cloudflared@${TUNNEL_NAME}'${NC}"
-    fi
+    
+    rm -f /tmp/tunnel_output.txt
 }
 
 # ===============================================
@@ -800,37 +711,52 @@ change_theme() {
 
     title_echo "PTERODACTYL THEME MANAGER"
     
+    if [ ! -d "$SERVER_DIR" ]; then
+        echo -e "${COLOR_RED}❌ Pterodactyl Panel not found. Install Panel first (Option 3).${NC}"
+        return
+    fi
+    
     echo -e "\n${COLOR_CYAN}--- Available Themes ---${NC}"
-    echo -e "  1. ${COLOR_GREEN}Nebula${NC} (Recommended)"
-    echo -e "  2. ${COLOR_GREEN}Treo${NC} (Popular Dark Theme)"
-    echo -e "  3. ${COLOR_GREEN}Minecraft Panel Theme${NC} (Minecraft Aesthetic)"
-    echo -e "  4. ${COLOR_RED}Exit${NC}"
+    echo -e "  1. Slate (Dark Modern Theme)"
+    echo -e "  2. Twilight (Purple/Blue Theme)"
+    echo -e "  3. Minecraft Theme"
+    echo -e "  4. Cancel"
 
     read -p "Enter your choice (1-4): " THEME_CHOICE
 
-    local THEME_NAME
-    local THEME_URL
-
     case $THEME_CHOICE in
-        1) THEME_NAME="Nebula"; THEME_URL="nebula_repo_url" ;;
-        2) THEME_NAME="Treo"; THEME_URL="treo_repo_url" ;;
-        3) THEME_NAME="Minecraft Panel Theme"; THEME_URL="mcpanel_repo_url" ;;
-        4) echo -e "${COLOR_YELLOW}Exiting Theme Manager.${NC}"; return ;;
-        *) echo -e "${COLOR_RED}Invalid choice. Exiting.${NC}"; return ;;
+        1) 
+            THEME_NAME="Slate"
+            THEME_CMD="cd $SERVER_DIR && curl -L https://raw.githubusercontent.com/Ferks-FK/Pterodactyl-AutoThemes/main/install.sh | bash -s -- slate"
+            ;;
+        2) 
+            THEME_NAME="Twilight"
+            THEME_CMD="cd $SERVER_DIR && curl -L https://raw.githubusercontent.com/Ferks-FK/Pterodactyl-AutoThemes/main/install.sh | bash -s -- twilight"
+            ;;
+        3) 
+            THEME_NAME="Minecraft"
+            THEME_CMD="cd $SERVER_DIR && curl -L https://raw.githubusercontent.com/Ferks-FK/Pterodactyl-AutoThemes/main/install.sh | bash -s -- minecraft"
+            ;;
+        4) 
+            echo -e "${COLOR_YELLOW}Theme installation cancelled.${NC}"
+            return
+            ;;
+        *) 
+            echo -e "${COLOR_RED}Invalid choice.${NC}"
+            return
+            ;;
     esac
 
-    # --- Theme Installation Logic ---
-    echo -e "${COLOR_YELLOW}--- Installing ${THEME_NAME} Theme ---${NC}"
+    show_loading "Installing $THEME_NAME theme..."
     
-    # Themes are usually installed via a dedicated script or composer package on the Pterodactyl directory
-    show_loading "Cloning/Downloading ${THEME_NAME}..."
-    # Placeholder: Commands to download and unpack the theme files into the resources/views directory or run a dedicated installer.
+    eval $THEME_CMD 2>&1 | tail -n 10
     
-    show_loading "Running Panel asset build commands..."
-    # Placeholder: Actual commands involve running 'php artisan view:clear', 'php artisan cache:clear', and potentially 'npm install' & 'npm run production'
-    echo -e "${COLOR_BLUE}[... Theme Installation/Build Commands Executing Hiddenly ... ]${NC}"
-
-    echo -e "\n${COLOR_GREEN}✅ Theme installed successfully: ${THEME_NAME}!${NC}"
+    if [ $? -eq 0 ]; then
+        echo -e "${COLOR_GREEN}✅ $THEME_NAME theme installed!${NC}"
+        echo -e "${COLOR_YELLOW}   Refresh your browser to see the new theme.${NC}"
+    else
+        echo -e "${COLOR_RED}❌ Theme installation failed.${NC}"
+    fi
 }
 
 # ===============================================
@@ -842,168 +768,59 @@ uninstall_components() {
     title_echo "COMPONENT UNINSTALLER"
     
     echo -e "\n${COLOR_CYAN}--- What do you want to remove? ---${NC}"
-    echo -e "  1. ${RED}Panel${NC} (Pterodactyl Panel)"
-    echo -e "  2. ${RED}Wings${NC} (Daemon)"
-    echo -e "  3. ${RED}BluePrint${NC}"
-    echo -e "  4. ${RED}Tailscale${NC}"
-    echo -e "  5. ${RED}Cloudflare${NC} (cloudflared)"
-    echo -e "  6. ${RED}Theme${NC}"
-    echo -e "  7. ${YELLOW}Back to Main Menu${NC}"
+    echo -e "  1. Panel (Pterodactyl Panel)"
+    echo -e "  2. Wings (Daemon)"
+    echo -e "  3. BluePrint"
+    echo -e "  4. Tailscale"
+    echo -e "  5. Cloudflare Tunnel"
+    echo -e "  6. Docker"
+    echo -e "  7. Back to Main Menu"
 
     read -p "Enter your choice (1-7): " REMOVE_CHOICE
 
     case $REMOVE_CHOICE in
         1)
-            # Panel Removal
             show_loading "Removing Pterodactyl Panel..."
+            sudo systemctl stop nginx 2>/dev/null
             sudo rm -rf "$SERVER_DIR" 
-            # Placeholder for database, webserver config, and cron job removal
-            echo -e "${COLOR_GREEN}✅ Done Removing: ${SERVER_DIR}, Webserver Configs, and Database entries.${NC}"
+            sudo rm -f /etc/nginx/sites-enabled/pterodactyl.conf
+            sudo rm -f /etc/nginx/sites-available/pterodactyl.conf
+            sudo systemctl start nginx 2>/dev/null
+            sudo mysql -e "DROP DATABASE IF EXISTS pterodactyl;" 2>/dev/null
+            sudo mysql -e "DROP USER IF EXISTS 'pterodactyl_user'@'127.0.0.1';" 2>/dev/null
+            echo -e "${COLOR_GREEN}✅ Panel removed.${NC}"
             ;;
         2)
-            # Wings Removal
-            show_loading "Removing Pterodactyl Wings..."
-            sudo systemctl disable --now wings 2>/dev/null
-            sudo rm -rf "$WINGS_DIR" 
-            # Placeholder for Docker network/image cleanup
-            echo -e "${COLOR_GREEN}✅ Done Removing: Wings service and configuration files in ${WINGS_DIR}.${NC}"
+            show_loading "Removing Wings..."
+            sudo systemctl stop wings 2>/dev/null
+            sudo systemctl disable wings 2>/dev/null
+            sudo rm -f /etc/systemd/system/wings.service
+            sudo rm -rf "$WINGS_DIR"
+            sudo rm -f /usr/local/bin/wings
+            sudo systemctl daemon-reload
+            echo -e "${COLOR_GREEN}✅ Wings removed.${NC}"
             ;;
         3)
-            # BluePrint Removal
             show_loading "Removing BluePrint..."
-            # Placeholder for un-installing BluePrint's files and rolling back panel assets
-            echo -e "${COLOR_GREEN}✅ Done Removing: BluePrint files and dependencies.${NC}"
+            cd "$SERVER_DIR" 2>/dev/null && sudo bash blueprint.sh -remove 2>&1 | tail -n 5
+            echo -e "${COLOR_GREEN}✅ BluePrint removed.${NC}"
             ;;
         4)
-            # Tailscale Removal
             show_loading "Removing Tailscale..."
             sudo tailscale down 2>/dev/null
-            sudo $PACKAGE_MANAGER purge tailscale -y > /dev/null 2>&1
-            echo -e "${COLOR_GREEN}✅ Done Removing: Tailscale client.${NC}"
+            sudo apt remove --purge -y tailscale > /dev/null 2>&1
+            echo -e "${COLOR_GREEN}✅ Tailscale removed.${NC}"
             ;;
         5)
-            # Cloudflared Removal
-            show_loading "Removing Cloudflared..."
-            # Placeholder for service and package removal
-            sudo $PACKAGE_MANAGER purge cloudflared -y > /dev/null 2>&1
-            echo -e "${COLOR_GREEN}✅ Done Removing: Cloudflared daemon.${NC}"
+            show_loading "Removing Cloudflare Tunnel..."
+            sudo systemctl stop cloudflared 2>/dev/null
+            sudo systemctl disable cloudflared 2>/dev/null
+            sudo apt remove --purge -y cloudflared > /dev/null 2>&1
+            sudo rm -rf /root/.cloudflared
+            echo -e "${COLOR_GREEN}✅ Cloudflare Tunnel removed.${NC}"
             ;;
         6)
-            # Theme Removal
-            show_loading "Removing Custom Theme..."
-            # Placeholder for deleting custom theme files and rebuilding default assets
-            echo -e "${COLOR_GREEN}✅ Done Removing: Custom Theme files. Panel reverted to default view.${NC}"
-            ;;
-        7) return ;;
-        *) echo -e "${COLOR_RED}Invalid choice. Returning.${NC}"; uninstall_components ;;
-    esac
-}
-
-# ===============================================
-# === 9. System Info ===
-# ===============================================
-show_system_info() {
-    title_echo "SYSTEM INFORMATION"
-    
-    detect_os # Just to echo the OS
-
-    echo -e "\n${COLOR_CYAN}--- Hardware & Core System ---${NC}"
-    echo -e "${COLOR_YELLOW}  CPU: ${NC}$(lscpu | grep 'Model name' | awk -F ': +' '{print $2}')"
-    echo -e "${COLOR_YELLOW}  GPU: ${NC}$(lspci | grep -i vga | awk -F ': ' '{print $2}' | head -n 1 || echo 'N/A')"
-    RAM_TOTAL=$(free -h | awk '/Mem:/ {print $2}')
-    echo -e "${COLOR_YELLOW}  RAM: ${NC}${RAM_TOTAL}"
-    
-    echo -e "\n${COLOR_CYAN}--- Storage ---${NC}"
-    DISK_TOTAL=$(df -h --total | awk '/total/ {print $2}')
-    DISK_FREE=$(df -h / | awk 'NR==2 {print $4}')
-    echo -e "${COLOR_YELLOW}  Disk Total: ${NC}${DISK_TOTAL}"
-    echo -e "${COLOR_YELLOW}  Disk Free: ${NC}${DISK_FREE}"
-
-    echo -e "\n${COLOR_CYAN}--- Networking & User ---${NC}"
-    LOCATION=$(curl -s ipinfo.io/country)
-    echo -e "${COLOR_YELLOW}  Location: ${NC}${LOCATION}"
-    PUBLIC_IP=$(curl -s ipinfo.io/ip)
-    echo -e "${COLOR_YELLOW}  Public IP: ${NC}${PUBLIC_IP}"
-    echo -e "${COLOR_YELLOW}  Username: ${NC}$(whoami)"
-    
-    echo -e "\n${COLOR_GREEN}--- Services ---${NC}"
-    if command -v tailscale &>/dev/null && tailscale status | grep -q 'LoggedIn'; then
-        echo -e "${COLOR_GREEN}  Tailscale: ${NC}Active (${COLOR_CYAN}$(tailscale ip -4)${NC})"
-    else
-        echo -e "${COLOR_YELLOW}  Tailscale: ${NC}Inactive/Not Installed"
-    fi
-    if command -v cloudflared &>/dev/null; then
-        echo -e "${COLOR_GREEN}  Cloudflared: ${NC}Installed"
-    else
-        echo -e "${COLOR_YELLOW}  Cloudflared: ${NC}Not Installed"
-    fi
-
-    sleep 5
-}
-
-# ===============================================
-# === Main Menu System ===
-# ===============================================
-# --- Main Menu Function Update --- 
-# ===============================================
-# === Main Menu System (Corrected for Pause) ===
-# ===============================================
-
-main_menu() {
-    # 1. Initial Clear and Splash (Only runs once at the start of the script)
-    if [ -z "$INITIAL_RUN_COMPLETE" ]; then
-        clear
-        echo -e "${COLOR_CYAN}$ZMC_ART${NC}"
-        echo -e "${COLOR_GREEN}$SH_VERSION${NC}"
-        INITIAL_RUN_COMPLETE="true"
-    fi
-
-    # Loop until user chooses to exit
-    while true; do
-        
-        # The screen is cleared at the end of the previous cycle (in post_execution_pause), 
-        # so we display the menu immediately.
-        
-        echo -e "\n${COLOR_CYAN}=======================================${NC}"
-        echo -e "${COLOR_CYAN}🚀 Universal Server Management Menu 🚀${NC}"
-        echo -e "${COLOR_CYAN}=======================================${NC}"
-        
-        echo -e "Select an option:"
-        echo -e "  1. ${COLOR_GREEN}Update${NC} (System Updates)"
-        echo -e "  2. ${COLOR_GREEN}Tailscale${NC} (VPN/Networking)"
-        echo -e "  3. ${COLOR_BLUE}Panel${NC} (Pterodactyl Web Interface)"
-        echo -e "  4. ${COLOR_BLUE}Wings${NC} (Pterodactyl Node Daemon)"
-        echo -e "  5. ${COLOR_BLUE}BluePrint${NC} (Pterodactyl Extension)"
-        echo -e "  6. ${COLOR_CYAN}Cloudflare${NC} (Tunnel Setup)"
-        echo -e "  7. ${COLOR_CYAN}Change Theme${NC} (Pterodactyl Theme)"
-        echo -e "  8. ${COLOR_RED}Uninstall${NC} (Remove Components)"
-        echo -e "  9. ${COLOR_YELLOW}System Info${NC} (Diagnostics)"
-        echo -e "  0. ${COLOR_RED}Exit${NC}"
-        
-        read -p "Enter your choice (1-9): " main_choice
-
-        # Execute chosen function, using the new pause mechanism
-        case $main_choice in
-            1) clear; update_system; post_execution_pause ;; 
-            2) clear; install_tailscale; post_execution_pause ;;
-            3) clear; install_panel; post_execution_pause ;;
-            4) clear; install_wings; post_execution_pause ;;
-            5) clear; install_blueprint; post_execution_pause ;;
-            6) clear; install_cloudflare_tunnel; post_execution_pause ;;
-            7) clear; change_theme; post_execution_pause ;;
-            8) clear; uninstall_components; post_execution_pause ;;
-            9) clear; show_system_info; post_execution_pause ;; 
-            0) 
-               title_echo "EXITING INSTALLER"
-                echo -e "${COLOR_CYAN}Thanks for using the ${BRANDING} service! Goodbye! 👋${NC}"
-                exit 0 
-                ;;
-            *) echo -e "${COLOR_RED}Invalid choice. Please enter a number between 1 and 10.${NC}" ;;
-        esac
-    done
-    clear
-}
-                       
-# --- Start the Main Menu ---
-main_menu
-
+            show_loading "Removing Docker..."
+            sudo apt remove --purge -y docker-ce docker-ce-cli containerd.io docker-buildx-plugin docker-compose-plugin > /dev/null 2>&1
+            sudo rm -rf /var/lib/docker
+            echo -e "${COLOR_GREEN
