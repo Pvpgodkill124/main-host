@@ -780,7 +780,7 @@ main_menu() {
         clear
         echo -e "${COLOR_CYAN}${ZMC_ART}${NC}"
         echo -e "${COLOR_GREEN}Version: ${SH_VERSION}${NC}"
-        echo -e "${COLOR_CYAN}Author: Claude (Anthropic)${NC}\n"
+        echo -e "${COLOR_CYAN}Author: Claude 🐐 (Anthropic)${NC}\n"
         INITIAL_RUN_COMPLETE="true"
     fi
 
