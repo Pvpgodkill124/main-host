@@ -191,13 +191,18 @@ install_panel() {
     sudo apt -y install software-properties-common curl apt-transport-https ca-certificates gnupg > /dev/null 2>&1
     sudo LC_ALL=C.UTF-8 add-apt-repository -y ppa:ondrej/php > /dev/null 2>&1
     sudo apt update > /dev/null 2>&1
-    sudo apt -y install php8.1 php8.1-cli php8.1-gd php8.1-mysql php8.1-pdo php8.1-mbstring php8.1-tokenizer php8.1-bcmath php8.1-xml php8.1-fpm php8.1-curl php8.1-zip nginx mariadb-server tar unzip git composer > /dev/null 2>&1
+    sudo apt -y install php8.1 php8.1-cli php8.1-gd php8.1-mysql php8.1-pdo php8.1-mbstring php8.1-tokenizer php8.1-bcmath php8.1-xml php8.1-fpm php8.1-curl php8.1-zip php8.1-redis nginx mariadb-server redis-server tar unzip git composer > /dev/null 2>&1
     
     if [ $? -ne 0 ]; then
         echo -e "${COLOR_RED}Failed to install dependencies.${NC}"
         return
     fi
-    echo -e "${COLOR_GREEN}Dependencies installed.${NC}"
+    
+    # Start and enable Redis
+    sudo systemctl enable redis-server > /dev/null 2>&1
+    sudo systemctl start redis-server > /dev/null 2>&1
+    
+    echo -e "${COLOR_GREEN}Dependencies installed (including Redis).${NC}"
     
     show_loading "Configuring MariaDB database..."
     DB_PASSWORD=$(openssl rand -base64 16 | tr -dc 'a-zA-Z0-9' | head -c 16)
@@ -229,6 +234,11 @@ install_panel() {
     sudo sed -i "s|APP_URL=http://example.com|APP_URL=http://${PANEL_HOST}|" .env
     sudo sed -i "s/APP_ENV=production/APP_ENV=production/" .env
     sudo sed -i "s/APP_DEBUG=false/APP_DEBUG=false/" .env
+    
+    # Configure Redis cache settings
+    sudo sed -i "s/CACHE_DRIVER=file/CACHE_DRIVER=redis/" .env
+    sudo sed -i "s/SESSION_DRIVER=file/SESSION_DRIVER=redis/" .env
+    sudo sed -i "s/QUEUE_CONNECTION=sync/QUEUE_CONNECTION=redis/" .env
 
     sudo chown -R www-data:www-data "$SERVER_DIR"
     
